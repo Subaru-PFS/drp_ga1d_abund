@@ -5,8 +5,7 @@ Shell of the PFS GA 1D Pipeline.
 Generates a PFS object dictionary initialized with inputs and outputs of the abundance
 pipeline.
 
-Inputs: pfsArm* FITS files containing spectral information and user-specified resolution
-mode.
+Inputs: pfsObject* FITS files containing spectral information
 Outputs: pfsAbund* FITS file containing information from PFS object dictionary.
 
 Usage:
@@ -15,23 +14,25 @@ Usage:
 Below is an example of proper usage of the ReadPFSObject class. This requires usage of
 the PFSObject class.
 
-import pfs_io as io #import the source code containing the relevant classes
+froms pfsabund import pfs_io as io #import the source code containing the relevant classes
 
-#Specify the unique identifier according to the PFS data model (visit) for the PFS 1d 
-#spectra (e.g., pfsArm-000001-b1.fits) and the resolution mode of the red arm to read
-#in the FITS files and generate PFS object dictionary
+# Specify the tract, patch, catId, objId, and visits according to the PFS data model
+# for the 1D combined spectra (PFSObject*.fits) to read in the FITS file and generate a
+# PFS objet dictionary
 
-pfs = io.Read.read_fits(visit=000001, mode='mr') 
+pfs = io.Read.read_fits(tract, patch, catId, objId, visit)
 
-#Write the PFS object dictionary to a FITS file with the filename pfsAbund-000001.fits
-pfs.write_to('pfsAbund-000001')
+# Write the PFS object dictionary to a FITS file
+pfs.write_to()
 """
 
 from __future__ import absolute_import
 import astropy.table as table
 from astropy.io import fits
+from astropy import wcs
 import numpy as np
 import collections
+import hashlib
 import os
 
 #################################################################
@@ -44,13 +45,56 @@ class PFSObject(dict):
     derived stellar parameters, such as the abundances.
     """
     
-    def __init__(self):
+    def __init__(self, tract, patch, catId, objId, visits):
     
         """
         Create and initialize the attributes of the PFS object
-        """
-        pass
         
+        Parameters
+        ----------
+        
+        tract: int: in the range (0, 99999), specifying an area of the sky
+        patch: string: in form "m,n", specifying a region within a tract
+        objId: int: a unique 64-bit object ID for an object.  For example, 
+                       the HSC object ID from the database.
+        catId: int: a small integer specifying the source of the objId. 
+                    Currently only 0: Simulated, 1: HSC, are defined.
+        visits: str or array-like of str: an incrementing exposure number, unique at any
+                                          site.
+        """
+        
+               
+        pfsVisitHash = self.calculate_pfsVisitHash(visits)
+        
+        file_format = '%05d-%s-%03d-%08x-%02d-0x%08x' % (tract, patch, catId, objId,\
+                                                         len(visits) % 100, pfsVisitHash )
+                                                         
+        self['fileNameFormat'] = file_format
+                
+    def calculate_pfsVisitHash(self, visits):
+         
+        """       
+        Calculate pfsVisitHash. Based on the calculate_pfsVisitHash() function in
+        pfs/datamodel/utils.py
+        """
+        
+        nVisit = len(visits)
+        self.nVisit = nVisit
+
+        if nVisit == 1 and visits[0] == 0: 
+            return 0x0
+
+        else:
+
+            m = hashlib.sha1()
+
+            for visit in visits:
+                m.update('%d'.encode('utf-8') % (visit))
+
+            # convert to an integer and truncate to 8 hexadecimal digits
+            pfsVisitHash = int(m.hexdigest(), 16) & 0xffffffff
+            return pfsVisitHash
+            
     def prop(self, property_name=''):
     
         """
@@ -86,31 +130,28 @@ class PFSObject(dict):
     
         """
         Write the dictionary to a FITS file
-        
-        Parameters
-        ----------
-        filename: string: the filename of the output fits file, omitting the file extension
         """ 
         
-        #Define the filename to specify the saved output
-        filename = 'pfsAbund-%06d' % self['visit']
+        # Define the filename to specify the saved output
+        filename = 'pfsAbund-%s' % self['fileNameFormat']
         savefile = out_dir+'/'+filename+'.fits'
         
-        #Check if the file already exists. If not, then proceed with generating. 
+        # Check if the file already exists. If not, then proceed with generating. 
         if not os.path.exists(savefile):
         
             keys = self.keys()
             t = table.Table() #construct a table for the data contained in the dictionary
         
             for key in keys:
-                column = [self[key]] #formatting for an equal number of rows (nrow = 1)
-                t.add_column(table.Column(name=key, data=column)) #add data to table
+                if key != 'fileNameFormat':
+                    column = [self[key]] #formatting for an equal number of rows (nrow = 1)
+                    t.add_column(table.Column(name=key, data=column)) #add data to table
         
-            #If it does not exist, create the specified output directory
+            # If it does not exist, create the specified output directory
             if not os.path.exists(out_dir):
                 os.makedirs(out_dir)
                 
-            #Save the constructed table as a FITS file under the specified filename
+            # Save the constructed table as a FITS file under the specified filename
             t.write(savefile, format='fits')
         
 #########################################################################
@@ -125,86 +166,120 @@ class ReadPFSObject():
         """
         
         self.hdu_dict = collections.OrderedDict()
+        
+        self.hdu_dict['combined_flux'] = 1
+        
+        self.hdu_dict['fluxtbl'] = 2
+        self.hdu_dict['wavelength'] = 0
         self.hdu_dict['flux'] = 1
         self.hdu_dict['ivar'] = 2
-        self.hdu_dict['wavelength'] = 4
-        self.hdu_dict['sky'] = 5
-        self.hdu_dict['config'] = 6
+        
+        self.hdu_dict['sky'] = 6
+        self.hdu_dict['config'] = 7
+        
         self.hdu_dict['obj_id'] = 1
         self.hdu_dict['ra'] = 1
         self.hdu_dict['dec'] = 1
         self.hdu_dict['phot'] = 1
             
-    def read_fits(self, visit, file_dir='.', mode=''):
+    def read_fits(self, tract, patch, catId, objId, visits, file_dir='.'):
     
         """
         Read in the FITS files for a given PFS spectrum object
         
         Parameters
         -----------
-        visit: int: an incrementing 6-digit exposure number, unique at any site
-        file_dir: string: directory containing the PFS fit files
-        mode: string: resolution mode of the PFS red arm
+        file_dir: string: directory containing the PFS fit files, defaults to current
+                          directory
+        tract: int: in the range (0, 99999), specifying an area of the sky
+        patch: string: in form "m,n", specifying a region within a tract
+        objId: int: a unique 64-bit object ID for an object.  For example, 
+                    the HSC object ID from the database.
+        catId: int: a small integer specifying the source of the objId. 
+                    Currently only 0: Simulated, 1: HSC, are defined.
+        visits: str or array-like of str: an incrementing exposure number, unique at any
+                                          site.
         
         Returns
         --------
         pfs: dict: catalog of pfs spectral parameters
         """
-    
-        #Define the spectrograph number
-        spectrograph = 1
-        nm_to_ang = 10. #conversion factor between nm and Angstroms
         
-        #Initialize a dictionary to store in the data from the PFS fits files
-        pfs = PFSObject()
+        nm_to_ang = 10. # conversion factor between nm and Angstroms
         
+        if not isinstance(visits, list) or not isinstance(visits, np.ndarray):
+            visits = [visits]
+        if not isinstance(visits, np.ndarray):
+            visits = np.array(visits)
+        
+        # Initialize a dictionary to store in the data from the PFS fits files
+        pfs = PFSObject(tract, patch, catId, objId, visits)
         self.initialize_inputs(pfs)
-        pfs.assign(visit, 'visit')
         
-        #Specify the red arm resolution mode
-        assert mode in ['mr', 'lr', 'MR', 'LR']
-        pfs.assign(mode.lower(), 'mode')
+        # Specify the FITS file for the combined spectra of multiple visits
+        # According to the datamodel, the file_dir will ultimately be 
+        # tract/patch/pfsObject-*.fits
         
-        #Based on the resolution mode of the red arm, specify the relevant file
-        if pfs.prop('mode') == 'mr':
-            red_arm = 'm'
-        if pfs.prop('mode') == 'lr':
-            red_arm = 'r'
+        file = "%s/pfsObject-%s.fits" % ( file_dir, pfs.prop('fileNameFormat') )
+
+        # Read in the FITS file HDU object
+        hdu = fits.open(file)
         
-        #Loop over each of the three arms of PFS
-        arms = ['b', red_arm, 'n']
+        ## Assign the PFS spectral information to the PFS object dictionary ##
         
-        #Initialize lists to store flux, inverse variance, wavelength, and
-        #sky-subtracted 1D information for all 3 arms of PFS
-        flux = []; ivar = []; wvl = []; sky = []
+        # Combined flux
+        combined_flux = hdu[self.hdu_dict['combined_flux']].data
+        pfs.assign(combined_flux, 'combined_flux') #units of nJy
         
-        for arm in arms:
+        # construct the wavelength solution for the combined wavelength by parsing the WCS
+        # keywords in the HDU for the combined flux
+        w = wcs.WCS(hdu[self.hdu_dict['combined_flux']].header) 
+        pixarr = np.linspace(0, len(combined_flux), len(combined_flux) )
+        combined_wavelength = w.wcs_pix2world(pixarr, 1)[0]
         
-            #Using pfsArm files instead of pfsObject files (at least for now) for
-            #clarity in separating spectral information for each arm. Additionally,
-            #the pfsObject files appear to be re-sampled onto a regular wavelength grid.
+        combined_wavelength *= nm_to_ang #convert from units of nm to Angstroms
+        pfs.assign(combined_wavelength, 'combined_wvl')
         
-            #Specify the FITS file for the relevant arm
-            #pfsArm: Reduced but not combined single spectra from a single exposure 
-            #(flux and wavelength calibrated)
-            file = '%s/pfsArm-%06d-%1s%1d.fits' % (file_dir, visit, arm, spectrograph)
+        # Read in the unbinned quantities from HDU #2 and separate flux, wavelength, and error 
+        # into each spectral arm
+        # Note that this information is necessary for continuum normalization
         
-            #Read in the FITS file HDU object
-            hdu = fits.open(file)
+        wavelength = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['wavelength']) #units of nm
+        wavelength *= nm_to_ang #convert from nm to Angstroms
+        flux = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['flux']) #units of nJy
+        std = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['ivar']) #units of nJy
+        
+        ## Is this actually the intensity error? That is, the error in units of nJy?
+        ## Comparing to the values in the first element of HDU #3 (the covariance re-sampled
+        ## onto a grid), I think it is more likely that the units are nJy^2
+        
+        ivar = std**(-1.) #convert the intensity error into an inverse variance
+        
+        ## Note that for the simulations I have done, for some reason the LR mode does not
+        ## contain 3 x 4096 data points per column in HDU #2 although each corresponding LR 
+        ## pfsArm file contains 4096 pixels
+        """
+        npix = 4096 # number of pixels per ccd in each arm
+        wb = np.array(list(range(npix)))
+        wr = wb + len(wb)
+        wn = wr + len(wb)
     
-            #Identify the flux and covariance arrays
-            fluxi = hdu[self.hdu_dict['flux']].data[0]  #units of nJy
-            covari = hdu[self.hdu_dict['ivar']].data[0][0]
-            ivari = np.reciprocal(covari)
-            wavei = hdu[self.hdu_dict['wavelength']].data[0]
-            wavei *= nm_to_ang #convert to Angstroms
-            skyi = hdu[self.hdu_dict['sky']].data[0] #also units of nJy
-            
-            flux.append(fluxi)
-            ivar.append(ivari)
-            wvl.append(wavei)
-            sky.append(skyi)
-            
+        wvarr = np.array([wavelength[wb], wavelength[wr], wavelength[wn]])
+        fluxarr = np.array([flux[wb], flux[wr], flux[wn]])
+        ivarr = np.array([ivar[wb], ivar[wr], ivar[wn]])
+        
+        pfs.assign(wvarr, 'wvl')  
+        pfs.assign(fluxarr, 'flux')  
+        pfs.assign(ivarr, 'ivar')
+        """
+        
+        pfs.assign(wavelength, 'wvl')
+        pfs.assign(flux, 'flux')  
+        pfs.assign(ivar, 'ivar')
+        
+        sky = hdu[self.hdu_dict['sky']].data # units of nJy, same length as combined flux
+        pfs.assign(sky, 'sky')
+
         #Load in the targeting information contained in the PFS configuration file
         pfsConfigId = hdu[self.hdu_dict['config']].data['pfsConfigId'][0]
         hdu.close()
@@ -233,15 +308,6 @@ class ReadPFSObject():
         pfs.assign(i, 'i')
         pfs.assign(z, 'z')
         pfs.assign(y, 'y')
-               
-        #Convert the lists to arrays
-        flux = np.array(flux); ivar = np.array(ivar); wvl = np.array(wvl); sky = np.array(sky)
-            
-        #Assign the PFS spectral information to the PFS object dictionary
-        pfs.assign(flux, 'flux')
-        pfs.assign(ivar, 'ivar')
-        pfs.assign(wvl, 'wvl')
-        pfs.assign(sky, 'sky')
         
         self.initialize_outputs(pfs)
         
