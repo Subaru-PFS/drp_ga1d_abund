@@ -363,8 +363,8 @@ class ReadPFSObject():
         pfs.assign(mhphot, 'mhphot') #photometric metallicity [M/H] for each age
         
         #Continuum as a function of wavelength, of size (3,4096) (narm, nfiber)
-        initcont = np.zeros((3, 4096))
-        refinedcont = np.zeros((3, 4096))
+        initcont = np.zeros(4096*3)
+        refinedcont = np.zeros(4096*3)
         
         pfs.assign(initcont, 'initcont') #initial continuum guess (before abundance measurement)
         pfs.assign(refinedcont, 'refinedcont') #refined (final) continuum, after abundance measurement
