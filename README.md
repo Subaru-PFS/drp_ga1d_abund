@@ -1,7 +1,8 @@
 # drp_ga1d
 A data analysis pipeline for the Galactic Archaeology science
 
-August 6, 2019
+October 4, 2019
+
 Now includes basic elements of PFS GA 1D abundance pipeline, adapted from the spectral synthesis method of
 Escala et al. 2019a. 
 
