@@ -27,6 +27,7 @@ pfs.write_to()
 """
 
 from __future__ import absolute_import
+from datetime import datetime as date
 import astropy.table as table
 from astropy.io import fits
 from astropy import wcs
@@ -34,6 +35,8 @@ import numpy as np
 import collections
 import hashlib
 import os
+
+_version = '0.0.3'
 
 #################################################################
 #################################################################
@@ -153,6 +156,17 @@ class PFSObject(dict):
                 
             # Save the constructed table as a FITS file under the specified filename
             t.write(savefile, format='fits')
+            
+        #Add keywords to the header regarding file creation date and version of the
+        #abundance pipeline
+        hdu = fits.open(savefile, mode='update')    
+        hdr = hdu[0].header
+        
+        d = date.today()
+        hdr.set('date', f'{d.year}-{d.month}-{d.day} {d.hour}:{d.minute}:{d.second}')
+        hdr.set('version', _version)
+        
+        hdu.close()
         
 #########################################################################
 #########################################################################

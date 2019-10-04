@@ -11,6 +11,7 @@ Utilitiy classes for use with MeasurePFSAbund()
 from __future__ import absolute_import
 from scipy.interpolate import splrep, splev
 from smooth_gauss import smooth_gauss
+import pfs_phot as phot
 import numpy as np
 import pickle
 import os
@@ -29,6 +30,44 @@ class PFSUtilities():
         Create and initialize the attributes of the MeasurePFSAbund class
         """
         
+    def get_phot(self, pfs=None, dm=0., ddm=0.):
+    
+        """
+        Get quantities inferred from photometry, such as the photometric effective
+        temperature and the photometric surface gravity.
+        
+        Parameters
+        ----------
+        pfs: PFSObject dictionary
+        dm: distance modulus to point source
+        ddm: error on the distance modulus to the point source
+        """
+    
+        #Use a grid of stellar evolutionary models to infer the photometric
+        #quantities via interpolation, or extrapolation as necessary
+        phot_dict = phot.from_phot(pfs.prop('i'), pfs.prop('g')-pfs.prop('i'), dm=dm, 
+                                    ddm=ddm)
+         
+        #select an age to assume for the isochrones in the abundance measurement
+        #process
+        age_i = 12                        
+        wage = np.where(np.round(phot_dict[0]['ages']/1.e9, decimals=0) == age_i)[0][0]
+
+        #teff_phot_dummy = np.full( len(pfs.prop('teffphot')), 4100. )
+        #logg_phot_dummy = np.full( len(pfs.prop('loggphot')), 1. )
+        #tefferr_phot_dummy = np.full( len(pfs.prop('teffphoterr')), 100.)
+        
+        pfs.assign(phot_dict[0]['teff'][wage], 'teffphot')
+        pfs.assign(phot_dict[0]['logg'][wage], 'loggphot')
+        
+        teffphoterr = np.nanmax([phot_dict[0]['err_teff'][wage], 100.])
+        pfs.assign(teffphoterr, 'teffphoterr')
+        
+        loggphoterr = np.nanmax([phot_dict[0]['err_logg'][wage], 0.1])
+        pfs.assign(loggphoterr, 'loggerr')
+        
+        return
+
     def smooth_gauss_wrapper(self, lambda1, spec1, lambda2, dlam_in):
     
         """

@@ -42,6 +42,7 @@ from __future__ import absolute_import
 from scipy.optimize import curve_fit
 import pfs_read_synth as read
 import pfs_utilities as ut
+import pfs_phot as phot
 import numpy as np
 
 ### Constants
@@ -62,7 +63,7 @@ class MeasurePFSAbund():
     """
     
     def __init__(self, pfs=None, mode=None, root='./', synth_path_blue='../gridie/',
-                 synth_path_red='../grid7/'):
+                 synth_path_red='../grid7/', dm=22., ddm=0.1):
     
         """
         Create and initialize the attributes of the MeasurePFSAbund class
@@ -70,24 +71,13 @@ class MeasurePFSAbund():
         
         self.mode = mode #spectral resolution mode - LR or MR
         self.root = root #root directory
+        self.dm = dm; self.ddm = ddm #distance modulus parameters
         self.synth_path_blue = synth_path_blue #directory pointing to blue grid
         self.synth_path_red = synth_path_red #directory pointing to red grid
         
-        ### Once photometry is available, would need to calculate photometric
-        ### quantities from comparison to theoretical isochrone sets in the relevant
-        ### filters (e.g., PARSEC). For now, just assume some reasonable values, since
-        ### T_eff_phot and Log_g_phot are necessary inputs.
+        #Calculate photometric quantities to take as input for the abundance pipeline
         
-        teff_phot_dummy = np.full( len(pfs.prop('teffphot')), 4100. )
-        logg_phot_dummy = np.full( len(pfs.prop('loggphot')), 1. )
-        tefferr_phot_dummy = np.full( len(pfs.prop('teffphoterr')), 100.)
-        
-        pfs.assign(teff_phot_dummy, 'teffphot')
-        pfs.assign(logg_phot_dummy, 'loggphot')
-        pfs.assign(tefferr_phot_dummy, 'teffphoterr')
-        
-        wage = 0 #pick an age of an isochrone -- this currently doesn't matter
-        self.wage = wage
+        ut.io.get_phot(pfs, dm=self.dm, ddm=self.ddm)
         
         #Construct the spectral resolution as a function of wavelength, based on the different
         #modes of PFS 
@@ -113,8 +103,8 @@ class MeasurePFSAbund():
         #Store initial guess values in new variables
         self.feh0 = self.feh_def
         self.alphafe0 = self.alphafe_def
-        self.teff0 = pfs.prop('teffphot')[self.wage]
-        self.logg = pfs.prop('loggphot')[self.wage]
+        self.teff0 = pfs.prop('teffphot')
+        self.logg = pfs.prop('loggphot')
         
         #Execute abundance measurement
         self.measure_abund(pfs)
@@ -168,14 +158,14 @@ class MeasurePFSAbund():
             #Insert the effective temperature pixel at the beginning of the observed spectrum
             #and the inverse variance array
             flux_teff = np.insert(pfs.prop('flux')[self.feh_fit_mask]/continuum[self.feh_fit_mask],
-                                  0, pfs.prop('teffphot')[self.wage])
+                                  0, pfs.prop('teffphot'))
                                   
             wvl_teff = np.insert(pfs.prop('wvl')[self.feh_fit_mask], 0, 
                                  pfs.prop('wvl')[self.feh_fit_mask][0])
 
             sigma_teff0 = ( pfs.prop('ivar')[self.feh_fit_mask] * continuum[self.feh_fit_mask]**2. )**(-0.5)
             npix_fit = float(len(sigma_teff0))
-            sigma_teff = np.insert(sigma_teff0, 0, pfs.prop('teffphoterr')[self.wage] *\
+            sigma_teff = np.insert(sigma_teff0, 0, pfs.prop('teffphoterr') *\
                                    np.sqrt(flex_factor/npix_fit))
 
             self.best_params0, self.covar0 = curve_fit(self.get_synth_step1, wvl_teff, flux_teff, 
@@ -214,6 +204,13 @@ class MeasurePFSAbund():
                 self.alphafe0 = self.best_params1[0]
                 
                 i += 1
+                
+        if i == self.maxiter:
+            print('WARNING: Maximum number of continuum iterations exceeded: exiting '+
+                   'continuum refinement loop')
+            pfs.assign('converge_flag', 0)
+        else:
+            pfs.assign('converge_flag', 1)
           
         ## Re-determine the metallicity ###
         
@@ -255,7 +252,6 @@ class MeasurePFSAbund():
         pfs.assign(self.best_params3[0], 'alphafe')
                                                     
         pfs.assign(np.sqrt(np.diag(self.covar0)[0]), 'tefferr')
-        pfs.assign(0.1, 'loggerr')
         pfs.assign(np.sqrt(np.diag(self.covar4)[0]), 'feherr')
         pfs.assign(np.sqrt(np.diag(self.covar3)[0]), 'alphafeerr')
         
