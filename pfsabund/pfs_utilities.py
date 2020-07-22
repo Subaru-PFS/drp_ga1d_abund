@@ -315,7 +315,7 @@ class PFSUtilities():
             
             noise_spectrum = splev(pfs.prop('wvl'), tck)
             
-            refinedcont = pfs.prop('initcont') / noise_spectrum
+            refinedcont = pfs.prop('initcont') * noise_spectrum
             
             pfs.assign(refinedcont, 'refinedcont')
             
