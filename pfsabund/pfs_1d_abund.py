@@ -140,16 +140,11 @@ class MeasurePFSAbund():
         ut.io.continuum_normalize(pfs)
         
         i = 0
+        pfs.assign(pfs.prop('initcont'), 'refinedcont')
+        
         while i < self.maxiter:
         
             ## Perform the fit for [Fe/H], Dlam, Teff
-            
-            #Use the initial continuum in the first iteration, otherwise use the
-            #refined continuum
-            if i == 0: 
-                continuum = pfs.prop('initcont')
-            else:
-                continuum = pfs.prop('refinedcont')
                 
             #Define initial parameters for fitting process
             params0 = [self.teff0, self.feh0] 
@@ -157,13 +152,16 @@ class MeasurePFSAbund():
             
             #Insert the effective temperature pixel at the beginning of the observed spectrum
             #and the inverse variance array
-            flux_teff = np.insert(pfs.prop('flux')[self.feh_fit_mask]/continuum[self.feh_fit_mask],
+            flux_teff = np.insert(pfs.prop('flux')[self.feh_fit_mask] /\
+                                  pfs.prop('refinedcont')[self.feh_fit_mask],
                                   0, pfs.prop('teffphot'))
                                   
             wvl_teff = np.insert(pfs.prop('wvl')[self.feh_fit_mask], 0, 
                                  pfs.prop('wvl')[self.feh_fit_mask][0])
 
-            sigma_teff0 = ( pfs.prop('ivar')[self.feh_fit_mask] * continuum[self.feh_fit_mask]**2. )**(-0.5)
+            sigma_teff0 = ( pfs.prop('ivar')[self.feh_fit_mask] *\
+                            pfs.prop('refinedcont')[self.feh_fit_mask]**2. )**(-0.5)
+                            
             npix_fit = float(len(sigma_teff0))
             sigma_teff = np.insert(sigma_teff0, 0, pfs.prop('teffphoterr') *\
                                    np.sqrt(flex_factor/npix_fit))
@@ -175,8 +173,11 @@ class MeasurePFSAbund():
                                                      gtol=1.e-10, xtol=1.e-10)
                                                      
             #Perform the fit [alpha/Fe]
-            asigma = (pfs.prop('ivar')[self.alphafe_fit_mask] * continuum[self.alphafe_fit_mask]**2. )**(-0.5) 
-            aflux = pfs.prop('flux')[self.alphafe_fit_mask] / continuum[self.alphafe_fit_mask]
+            asigma = (pfs.prop('ivar')[self.alphafe_fit_mask] *\
+                      pfs.prop('refinedcont')[self.alphafe_fit_mask]**2. )**(-0.5) 
+                      
+            aflux = pfs.prop('flux')[self.alphafe_fit_mask] /\
+                    pfs.prop('refinedcont')[self.alphafe_fit_mask]
     
             self.best_params1, self.covar1 = curve_fit(self.get_synth_step2, 
                                                        pfs.prop('wvl')[self.alphafe_fit_mask], 
@@ -187,7 +188,7 @@ class MeasurePFSAbund():
 
             best_synth = self.get_best_synth(pfs.prop('wvl'))
             
-            ut.io.continuum_refinement(pfs, best_synth, continuum)
+            ut.io.continuum_refinement(pfs, best_synth)
 
             if (np.abs(self.best_params0[1] - self.feh0) < self.feh_thresh) and\
                (np.abs(self.best_params1[0] - self.alphafe0) < self.alphafe_thresh) and\
@@ -255,6 +256,11 @@ class MeasurePFSAbund():
         pfs.assign(np.sqrt(np.diag(self.covar4)[0]), 'feherr')
         pfs.assign(np.sqrt(np.diag(self.covar3)[0]), 'alphafeerr')
         
+        best_synth_final = self.get_best_synth(pfs.prop('wvl'), teff=pfs.prop('teff'), 
+                                               feh=pfs.prop('feh'), alphafe=pfs.prop('alphafe'))
+                                               
+        pfs.assign(best_synth_final, 'synth')
+                                
         print(pfs.prop('teff'), pfs.prop('logg'), pfs.prop('feh'), pfs.prop('alphafe'))
         print(pfs.prop('tefferr'), pfs.prop('loggerr'), pfs.prop('feherr'), pfs.prop('alphafeerr'))
         
@@ -363,11 +369,11 @@ class MeasurePFSAbund():
 
             return synthi
             
-    def get_best_synth(self, wvl_obs):
+    def get_best_synth(self, wvl_obs, teff=self.best_params0[0], feh=self.best_params0[1],
+                       alphafe=self.best_params1[0]):
     
             #Read in the synthetic spectrum
-            wvl, synth = self.construct_synth(wvl_obs, self.best_params0[0], self.best_params0[1], 
-                self.best_params1[0])
+            wvl, synth = self.construct_synth(wvl_obs, teff, feh, alphafe)
 
             #Smooth the synthetic spectrum according to the spectral resolution
             synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_obs, self.dlam)

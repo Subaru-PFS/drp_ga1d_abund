@@ -270,7 +270,7 @@ class PFSUtilities():
         
         return
         
-    def continuum_refinement(self, pfs=None, synth=None, continuum=None, wavelength_range=None, 
+    def continuum_refinement(self, pfs=None, synth=None, wavelength_range=None, 
         npix=100, sigma_l=3., sigma_u=3., maxiter=5, k=3):
 
         """
@@ -298,8 +298,8 @@ class PFSUtilities():
         else:
         
             #Define continuum normalized quantities
-            fluxi = pfs.prop('flux')/continuum
-            ivari = pfs.prop('ivar') * continuum**2
+            fluxi = pfs.prop('flux') / pfs.prop('initcont')
+            ivari = pfs.prop('ivar') * pfs.prop('initcont')**2
 
             #Mask nonsensical values from the continuum determination
             mask = np.full( len(pfs.prop('wvl')), False, dtype=bool)
