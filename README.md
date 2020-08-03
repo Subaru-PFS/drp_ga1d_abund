@@ -1,10 +1,10 @@
 # drp_ga1d
 A data analysis pipeline for the Galactic Archaeology science
 
-October 4, 2019
+August 3, 2020
 
 Now includes basic elements of PFS GA 1D abundance pipeline, adapted from the spectral synthesis method of
-Escala et al. 2019a. 
+Escala et al. 2019a. Measures T_eff, [Fe/H], and [alpha/Fe] from spectroscopy.
 
 * pfs_io.py
 
@@ -19,6 +19,8 @@ Outputs: pfsAbund* FITS file containing information from PFS object dictionary.
 Inputs: PFSObject dictionary with necessary information to perform abundance measurement
 Outputs: Modified PFSObject dictionary with updated keywords corresponding to the output
          of the PFS 1d abundance pipeline.
+         
+* pfs_utilities.py, pfs_phot.py, and pfs_read_synth.py provide helper functions for pfs_1d_abund.py
          
 NOTE: In order to use this pipeline, you MUST have access to a continuum-normalized grids
 of synthethic spectra over the appropriate wavelength range, such as the grids of
