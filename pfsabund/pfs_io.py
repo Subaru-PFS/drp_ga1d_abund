@@ -48,7 +48,7 @@ class PFSObject(dict):
     derived stellar parameters, such as the abundances.
     """
     
-    def __init__(self, tract, patch, catId, objId, visits):
+    def __init__(self, catId, tract, patch, objId, visits):
     
         """
         Create and initialize the attributes of the PFS object
@@ -62,41 +62,29 @@ class PFSObject(dict):
                        the HSC object ID from the database.
         catId: int: a small integer specifying the source of the objId. 
                     Currently only 0: Simulated, 1: HSC, are defined.
-        visits: str or array-like of str: an incrementing exposure number, unique at any
+        visits: int or array-like of int: an incrementing exposure number, unique at any
                                           site.
         """
+    
+        pfsVisitHash = self.calculate_pfsVisitHash([str(vv).encode() for vv in sorted(visits)])
         
-               
-        pfsVisitHash = self.calculate_pfsVisitHash(visits)
-        
-        file_format = '%05d-%s-%03d-%08x-%02d-0x%08x' % (tract, patch, catId, objId,\
-                                                         len(visits) % 100, pfsVisitHash )
+        file_format = '%03d-%05d-%s-%016x-%03d-0x%016x' % (catId, tract, patch, objId,\
+                                                           len(visits) % 1000, pfsVisitHash)
                                                          
         self['fileNameFormat'] = file_format
                 
-    def calculate_pfsVisitHash(self, visits):
+    def calculate_pfsVisitHash(self, *args):
          
         """       
         Calculate pfsVisitHash. Based on the calculate_pfsVisitHash() function in
         pfs/datamodel/utils.py
         """
-        
-        nVisit = len(visits)
-        self.nVisit = nVisit
 
-        if nVisit == 1 and visits[0] == 0: 
-            return 0x0
-
-        else:
-
-            m = hashlib.sha1()
-
-            for visit in visits:
-                m.update('%d'.encode('utf-8') % (visit))
-
-            # convert to an integer and truncate to 8 hexadecimal digits
-            pfsVisitHash = int(m.hexdigest(), 16) & 0xffffffff
-            return pfsVisitHash
+        m = hashlib.sha1()
+        for l in list(args):
+            m.update(str(l).encode())
+            
+        return int(m.hexdigest(), 16) & 0xffffffffffffffff
             
     def prop(self, property_name=''):
     
@@ -183,20 +171,20 @@ class ReadPFSObject():
         
         self.hdu_dict['combined_flux'] = 1
         
-        self.hdu_dict['fluxtbl'] = 2
+        self.hdu_dict['fluxtbl'] = 8
         self.hdu_dict['wavelength'] = 0
         self.hdu_dict['flux'] = 1
         self.hdu_dict['ivar'] = 2
         
-        self.hdu_dict['sky'] = 6
-        self.hdu_dict['config'] = 7
+        self.hdu_dict['sky'] = 4
+        self.hdu_dict['obs'] = 7
         
         self.hdu_dict['obj_id'] = 1
         self.hdu_dict['ra'] = 1
         self.hdu_dict['dec'] = 1
-        self.hdu_dict['phot'] = 1
+        self.hdu_dict['phot'] = 2
             
-    def read_fits(self, tract, patch, catId, objId, visits, file_dir='.'):
+    def read_fits(self, catId, tract, patch, objId, visits, file_dir='.'):
     
         """
         Read in the FITS files for a given PFS spectrum object
@@ -227,12 +215,12 @@ class ReadPFSObject():
             visits = np.array(visits)
         
         # Initialize a dictionary to store in the data from the PFS fits files
-        pfs = PFSObject(tract, patch, catId, objId, visits)
+        pfs = PFSObject(catId, tract, patch, objId, visits)
         self.initialize_inputs(pfs)
         
         # Specify the FITS file for the combined spectra of multiple visits
         # According to the datamodel, the file_dir will ultimately be 
-        # tract/patch/pfsObject-*.fits
+        # catId/tract/patch/pfsObject-*.fits
         
         file = "%s/pfsObject-%s.fits" % ( file_dir, pfs.prop('fileNameFormat') )
 
@@ -272,20 +260,6 @@ class ReadPFSObject():
         ## Note that for the simulations I have done, for some reason the LR mode does not
         ## contain 3 x 4096 data points per column in HDU #2 although each corresponding LR 
         ## pfsArm file contains 4096 pixels
-        """
-        npix = 4096 # number of pixels per ccd in each arm
-        wb = np.array(list(range(npix)))
-        wr = wb + len(wb)
-        wn = wr + len(wb)
-    
-        wvarr = np.array([wavelength[wb], wavelength[wr], wavelength[wn]])
-        fluxarr = np.array([flux[wb], flux[wr], flux[wn]])
-        ivarr = np.array([ivar[wb], ivar[wr], ivar[wn]])
-        
-        pfs.assign(wvarr, 'wvl')  
-        pfs.assign(fluxarr, 'flux')  
-        pfs.assign(ivarr, 'ivar')
-        """
         
         pfs.assign(wavelength, 'wvl')
         pfs.assign(flux, 'flux')  
@@ -295,11 +269,12 @@ class ReadPFSObject():
         pfs.assign(sky, 'sky')
 
         #Load in the targeting information contained in the PFS configuration file
-        pfsConfigId = hdu[self.hdu_dict['config']].data['pfsConfigId'][0]
+        
+        pfsDesignId = hdu[self.hdu_dict['obs']].data['pfsDesignId'][0]
         hdu.close()
        
-        hexbase = '0x' + '%08x'.zfill(12) % pfsConfigId
-        config = '%s/pfsConfig-%s.fits' % (file_dir, hexbase)
+        visit0 = visits[-1]
+        config = '%s/pfsConfig-0x%016x-%06d.fits' % (file_dir, pfsDesignId, visit0)
         hdu_config = fits.open(config)
         
         #Save information concerning object id and RA DEC position
@@ -308,8 +283,13 @@ class ReadPFSObject():
         dec = hdu_config[self.hdu_dict['dec']].data['dec'][0]
         
         #Save photometric information
-        g, r, i, z, y = hdu_config[self.hdu_dict['phot']].data['fiberMag'][0]
+        filters = hdu_config[self.hdu_dict['phot']].data['filterName']
+        mags = hdu_config[self.hdu_dict['phot']].data['fiberMag']
         hdu_config.close()
+        
+        filter_names = np.array(['g', 'r', 'i', 'z', 'y'])
+        filter_vals = np.array([mags[filters == filter_name][0] if filter_name in filters\
+                       else np.nan for filter_name in filter_names])
         
         #Assign the OBJID, RA, and DEC to PFS object dictionary
         pfs.assign(obj_id, 'obj_id')
@@ -317,11 +297,8 @@ class ReadPFSObject():
         pfs.assign(dec, 'dec')
         
         #Assign the photometry to the PFS object dictionary
-        pfs.assign(g, 'g')
-        pfs.assign(r, 'r')
-        pfs.assign(i, 'i')
-        pfs.assign(z, 'z')
-        pfs.assign(y, 'y')
+        pfs.assign(filter_vals, 'mag')
+        pfs.assign(filter_names, 'filter')
         
         self.initialize_outputs(pfs)
         

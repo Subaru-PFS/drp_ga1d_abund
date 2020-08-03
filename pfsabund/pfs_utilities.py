@@ -42,11 +42,17 @@ class PFSUtilities():
         dm: distance modulus to point source
         ddm: error on the distance modulus to the point source
         """
+        
+        if (np.isnan(pfs.prop('mag')[pfs.prop('filter') == 'i']) or\
+            np.isnan(pfs.prop('mag')[pfs.prop('filter') == 'g'])):
+                raise ValueError('Invalid photometric value in either g or i band')
     
         #Use a grid of stellar evolutionary models to infer the photometric
         #quantities via interpolation, or extrapolation as necessary
-        phot_dict = phot.from_phot(pfs.prop('i'), pfs.prop('g')-pfs.prop('i'), dm=dm, 
-                                    ddm=ddm)
+        phot_dict = phot.from_phot(pfs.prop('mag')[pfs.prop('filter') == 'i'], 
+                                   pfs.prop('mag')[pfs.prop('filter') == 'g']-\
+                                   pfs.prop('mag')[pfs.prop('filter') == 'i'], 
+                                   dm=dm, ddm=ddm)
          
         #select an age to assume for the isochrones in the abundance measurement
         #process
