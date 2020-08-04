@@ -2,7 +2,7 @@
 @author: I. Escala (Caltech, Princeton)
 
 Parts of PFS 1D Abundance Pipeline, adapted from the spectral synthesis method of
-Escala et al. 2019a. 
+Escala et al. 2019. 
 
 Utilitiy classes for use with MeasurePFSAbund()
 
@@ -10,8 +10,8 @@ Utilitiy classes for use with MeasurePFSAbund()
 
 from __future__ import absolute_import
 from scipy.interpolate import splrep, splev
-from smooth_gauss import smooth_gauss
-import pfs_phot as phot
+from pfsabund import smooth_gauss
+from pfsabund import pfs_phot as phot
 import numpy as np
 import pickle
 import os
@@ -132,7 +132,7 @@ class PFSUtilities():
         halfwindow = int(np.ceil(1.1*5.*dlam.max()/dlambda1.min()))
     
         #Python wrapped fortran implementation of smooth gauss
-        spec2 = smooth_gauss(lambda1, spec1, lambda2, dlam, f, halfwindow)
+        spec2 = smooth_gauss.smooth_gauss(lambda1, spec1, lambda2, dlam, f, halfwindow)
     
         return spec2
         

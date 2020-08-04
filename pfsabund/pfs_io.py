@@ -20,7 +20,7 @@ froms pfsabund import pfs_io as io #import the source code containing the releva
 # for the 1D combined spectra (PFSObject*.fits) to read in the FITS file and generate a
 # PFS objet dictionary
 
-pfs = io.Read.read_fits(tract, patch, catId, objId, visit)
+pfs = io.Read.read_fits(catId, patch, catId, objId, visit)
 
 # Write the PFS object dictionary to a FITS file
 pfs.write_to()
@@ -36,7 +36,7 @@ import collections
 import hashlib
 import os
 
-_version = '0.0.3'
+_version = '0.0.4'
 
 #################################################################
 #################################################################
