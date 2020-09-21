@@ -1,10 +1,10 @@
 # drp_ga1d
 A data analysis pipeline for the Galactic Archaeology science
 
-August 3, 2020
+September 21, 2020
 
 Now includes basic elements of PFS GA 1D abundance pipeline, adapted from the spectral synthesis method of
-Escala et al. 2019. Measures T_eff, [Fe/H], and [alpha/Fe] from spectroscopy.
+Escala et al. 2019. Measures T_eff, [Fe/H], and [alpha/Fe] from spectroscopy, including an optional flag (fit_logg=True) to measure surface gravity as a free parameter (currently in development).
 
 * pfs_io.py
 
