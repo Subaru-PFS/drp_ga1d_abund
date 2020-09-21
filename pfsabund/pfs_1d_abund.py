@@ -61,11 +61,12 @@ class MeasurePFSAbund():
 
     """
     Abundance measurement class to measure stellar parameters (T_eff) and abundances
-    ([Fe/H], [alpha/Fe]) of PFS spectra. log_g is fixed to the photometric value.
+    ([Fe/H], [alpha/Fe]) of PFS spectra. log_g is fixed to the photometric value OR
+    can be varied as a free parameter using fit_logg=True
     """
     
     def __init__(self, pfs=None, mode=None, root='./', synth_path_blue='../gridie/',
-                 synth_path_red='../grid7/', dm=22., ddm=0.1):
+                 synth_path_red='../grid7/', dm=22., ddm=0.1, fit_logg=False):
     
         """
         Create and initialize the attributes of the MeasurePFSAbund class
@@ -78,8 +79,16 @@ class MeasurePFSAbund():
         self.synth_path_red = synth_path_red #directory pointing to red grid
         
         #Calculate photometric quantities to take as input for the abundance pipeline
+        #Note for the case of fit_logg=True where the distance modulus is not well
+        #known, the photometric estimate returned will not necessarily be valid and
+        #will not subsequently be used
         
-        ut.io.get_phot(pfs, dm=self.dm, ddm=self.ddm)
+        try: ut.io.get_phot(pfs, dm=self.dm, ddm=self.ddm)
+        except: 
+            pfs.assign(4300, 'teffphot')
+            pfs.assign(100., 'teffphoterr')
+            pfs.assign(1.5, 'loggphot')
+        
         
         #Construct the spectral resolution as a function of wavelength, based on the different
         #modes of PFS 
@@ -97,21 +106,27 @@ class MeasurePFSAbund():
         
         self.feh_def = -2. #starting point for metallicity -- this value doesn't matter
         self.alphafe_def = 0.
+        self.logg_def = 1.
 
         #Define convergence criteria for the continuum refinement
         self.maxiter = 50
-        self.feh_thresh = 0.001; self.alphafe_thresh = 0.001; self.teff_thresh = 1.
+        self.feh_thresh = 0.001; self.alphafe_thresh = 0.001
+        self.teff_thresh = 1.; self.logg_thresh = 0.001
         
         #Store initial guess values in new variables
         self.feh0 = self.feh_def
         self.alphafe0 = self.alphafe_def
         self.teff0 = pfs.prop('teffphot')
-        self.logg = pfs.prop('loggphot')
+        
+        #If fitting for the surface gravity, set logg to the default value
+        #otherwise, fix to the photometric value
+        if fit_logg: self.logg0 = self.logg_def
+        else: self.logg = pfs.prop('loggphot')
         
         #Execute abundance measurement
-        self.measure_abund(pfs)
+        self.measure_abund(pfs, fit_logg=fit_logg)
         
-    def measure_abund(self, pfs=None):
+    def measure_abund(self, pfs=None, fit_logg=False):
     
         """
         Measure T_eff, [Fe/H], and [alpha/Fe] for the observed spectrum
@@ -148,8 +163,15 @@ class MeasurePFSAbund():
         
             ## Perform the fit for [Fe/H], Dlam, Teff
                 
-            #Define initial parameters for fitting process
-            params0 = [self.teff0, self.feh0] 
+            #Define initial parameters and bounds for fitting process
+            
+            if fit_logg: # if logg is a free parameter
+                params0 = [self.teff0, self.feh0, self.logg0]
+                bounds0 = ([3500., -4.5, 0.], [8000., 0., 5.])
+            else: 
+                params0 = [self.teff0, self.feh0] 
+                bounds0 = ([3500., -4.5], [8000., 0.])
+            
             params1 = [self.alphafe_def]
             
             #Insert the effective temperature pixel at the beginning of the observed spectrum
@@ -168,11 +190,27 @@ class MeasurePFSAbund():
             sigma_teff = np.insert(sigma_teff0, 0, pfs.prop('teffphoterr') *\
                                    np.sqrt(flex_factor/npix_fit))
 
-            self.best_params0, self.covar0 = curve_fit(self.get_synth_step1, wvl_teff, flux_teff, 
-                                                     p0=params0, sigma=sigma_teff, 
-                                                     bounds=([3500., -4.5],[8000., 0.]), 
-                                                     absolute_sigma=True, ftol=1.e-10, 
-                                                     gtol=1.e-10, xtol=1.e-10)
+            #If surface gravity is a free parameter
+            if fit_logg:
+            
+                self.best_params0, self.covar0 = curve_fit(lambda x, t, f, g: self.get_synth_step1(x, t, f, logg_fit=g),
+                                                           wvl_teff, flux_teff, p0=params0, 
+                                                           sigma=sigma_teff, bounds=bounds0, 
+                                                           absolute_sigma=True, ftol=1.e-10, 
+                                                           gtol=1.e-10, xtol=1.e-10)
+                                                           
+                self.teff, self.feh, self.logg = self.best_params0
+                
+            else:
+            
+                self.best_params0, self.covar0 = curve_fit(lambda x, t, f: self.get_synth_step1(x, t, f, logg_fit=None),
+                                                           wvl_teff, flux_teff, p0=params0, 
+                                                           sigma=sigma_teff, bounds=bounds0, 
+                                                           absolute_sigma=True, ftol=1.e-10, 
+                                                           gtol=1.e-10, xtol=1.e-10)
+                                                           
+                self.teff, self.feh = self.best_params0
+                
                                                      
             #Perform the fit [alpha/Fe]
             asigma = (pfs.prop('ivar')[self.alphafe_fit_mask] *\
@@ -187,24 +225,40 @@ class MeasurePFSAbund():
                                                        bounds=([-0.8], [1.2]), 
                                                        absolute_sigma=True, ftol=1.e-10, 
                                                        gtol=1.e-10, xtol=1.e-10)
+                                                       
+            self.alphafe = self.best_params1[0]
 
+            #Construct the best-fit synthetic spectrum from the best fit parameters
             best_synth = self.get_best_synth(wvl_obs=pfs.prop('wvl'))
             
+            #Refine the continuum based on these parameters
             ut.io.continuum_refinement(pfs, best_synth)
-
-            if (np.abs(self.best_params0[1] - self.feh0) < self.feh_thresh) and\
-               (np.abs(self.best_params1[0] - self.alphafe0) < self.alphafe_thresh) and\
-               (np.abs(self.best_params0[0] - self.teff0) < self.teff_thresh):
+            
+            #Check if the continuum iteration has converged
+            
+            final = np.array([self.teff, self.feh, self.alphafe])
+            initial = np.array([self.teff0, self.feh0, self.alphafe0])
+            thresh = np.array([self.teff_thresh, self.feh_thresh, self.alphafe_thresh])
+            
+            if fit_logg:
+                final = np.append(final, self.logg)
+                initial = np.append(initial, self.logg0)
+                thresh = np.append(thresh, self.logg_thresh)
                 
+            converged = np.abs(final - initial) < thresh
+            if converged.all(): 
                 break
                 
             else:
             
-                print(self.best_params0[0], self.best_params0[1], self.best_params1[0])
+                print(final)
                 
-                self.teff0 = self.best_params0[0]
-                self.feh0 = self.best_params0[1]
-                self.alphafe0 = self.best_params1[0]
+                self.teff0 = self.teff
+                self.feh0 = self.feh
+                self.alphafe0 = self.alphafe
+                
+                if fit_logg:
+                    self.logg0 = self.logg
                 
                 i += 1
                 
@@ -212,6 +266,7 @@ class MeasurePFSAbund():
             print('WARNING: Maximum number of continuum iterations exceeded: exiting '+
                    'continuum refinement loop')
             pfs.assign('converge_flag', 0)
+            
         else:
             pfs.assign('converge_flag', 1)
           
@@ -249,7 +304,7 @@ class MeasurePFSAbund():
                                                     bounds=([-4.5],[0.]), absolute_sigma=True, 
                                                     ftol=1.e-10, gtol=1.e-10, xtol=1.e-10)
                                                     
-        pfs.assign(self.best_params0[0], 'teff')
+        pfs.assign(self.teff, 'teff')
         pfs.assign(self.logg, 'logg')
         pfs.assign(self.best_params4[0], 'feh')
         pfs.assign(self.best_params3[0], 'alphafe')
@@ -258,8 +313,12 @@ class MeasurePFSAbund():
         pfs.assign(np.sqrt(np.diag(self.covar4)[0]), 'feherr')
         pfs.assign(np.sqrt(np.diag(self.covar3)[0]), 'alphafeerr')
         
+        if fit_logg:
+            pfs.assign(np.sqrt(np.diag(self.covar0)[-1]), 'loggerr')
+        
         best_synth_final = self.get_best_synth(wvl_obs=pfs.prop('wvl'), teff=pfs.prop('teff'), 
-                                               feh=pfs.prop('feh'), alphafe=pfs.prop('alphafe'))
+                                               feh=pfs.prop('feh'), logg=pfs.prop('logg'),
+                                               alphafe=pfs.prop('alphafe'))
                                                
         pfs.assign(best_synth_final, 'synth')
                                 
@@ -271,7 +330,7 @@ class MeasurePFSAbund():
     def get_synth_step5(self, wvl_fit=None, feh_fit=None):
     
         #Read in the synthetic spectrum
-        wvl, synth = self.construct_synth(wvl_fit, self.best_params0[0], feh_fit, 
+        wvl, synth = self.construct_synth(wvl_fit, self.teff, feh_fit, self.logg,
                                           self.best_params3[0])
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
@@ -287,7 +346,7 @@ class MeasurePFSAbund():
         is re-determined based on the revised observed spectrum
         """
         #Read in the synthetic spectrum
-        wvl, synth = self.construct_synth(wvl_fit, self.best_params0[0], self.best_params2[0], 
+        wvl, synth = self.construct_synth(wvl_fit, self.teff, self.best_params2[0], self.logg, 
                                           alphafe_fit)
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
@@ -304,8 +363,7 @@ class MeasurePFSAbund():
         """
         
         #Read in the synthetic spectrum
-        wvl, synth = self.construct_synth(wvl_fit, self.best_params0[0], feh_fit, 
-                                          self.best_params1[0])
+        wvl, synth = self.construct_synth(wvl_fit, self.teff, feh_fit, self.logg, self.alphafe)
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
         if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray): 
@@ -313,7 +371,7 @@ class MeasurePFSAbund():
 
         return synthi
                                                      
-    def get_synth_step1(self, wvl_fit=None, teff_fit=None, feh_fit=None):
+    def get_synth_step1(self, wvl_fit=None, teff_fit=None, feh_fit=None, logg_fit=None):
 
         """
         Define the function to be used in the curve fitting, such that 
@@ -327,6 +385,7 @@ class MeasurePFSAbund():
         ----------
         wvl: array-like: the flattened wavelength array of the observed spectrum
         teff_fit: float: spectroscopic effective temperature, to be fitted
+        logg_fit: float, surface gravity to be fitted, if not None
         feh_fit: float: spectroscopic metallicity, to be fitted
 
         Returns
@@ -338,8 +397,12 @@ class MeasurePFSAbund():
                               spectrum and smoothed to the given FWHM spectral resolution
         """
         
-        #Read in the synthetic spectrum with both blue and red components 
-        wvl, synth = self.construct_synth(wvl_fit, teff_fit, feh_fit, self.alphafe0)
+        #Read in the synthetic spectrum with both blue and red components
+        
+        if logg_fit is not None: #if logg is a free parameter
+            wvl, synth = self.construct_synth(wvl_fit, teff_fit, feh_fit, logg_fit, self.alphafe0)
+        else:
+            wvl, synth = self.construct_synth(wvl_fit, teff_fit, feh_fit, self.logg, self.alphafe0)
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
         #Assume that the spectral resolution is constant for a given arm of PFS
@@ -361,7 +424,7 @@ class MeasurePFSAbund():
             """
     
             #Read in the synthetic spectrum
-            wvl, synth = self.construct_synth(wvl_fit, self.best_params0[0], self.best_params0[1], 
+            wvl, synth = self.construct_synth(wvl_fit, self.teff, self.feh, self.logg, 
                          alphafe_fit)
 
             #Smooth the synthetic spectrum according to the spectral resolution
@@ -371,24 +434,26 @@ class MeasurePFSAbund():
 
             return synthi
             
-    def get_best_synth(self, wvl_obs=None, teff=None, feh=None, alphafe=None):
+    def get_best_synth(self, wvl_obs=None, teff=None, feh=None, logg=None, alphafe=None):
                        
             if teff is None:
-                teff = self.best_params0[0]
+                teff = self.teff
             if feh is None:
-                feh = self.best_params0[1]
+                feh = self.feh
+            if logg is None:
+                logg = self.logg
             if alphafe is None:
                 alphafe = self.best_params1[0]
     
             #Read in the synthetic spectrum
-            wvl, synth = self.construct_synth(wvl_obs, teff, feh, alphafe)
+            wvl, synth = self.construct_synth(wvl_obs, teff, feh, logg, alphafe)
 
             #Smooth the synthetic spectrum according to the spectral resolution
             synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_obs, self.dlam)
 
             return synthi
         
-    def construct_synth(self, wvl=None, teff_in=None, feh_in=None, alphafe_in=None):
+    def construct_synth(self, wvl=None, teff_in=None, feh_in=None, logg_in=None, alphafe_in=None):
         
         """
         Construct a synthetic spectrum to compare to observational data. Helper
@@ -400,7 +465,7 @@ class MeasurePFSAbund():
         
             #Read in the synthetic spectrum from the blue grid
             wvlb, synthb = read.io.read_interp_synth(teff=teff_in,
-                logg=self.logg, feh=feh_in, alphafe=alphafe_in, 
+                logg=logg_in, feh=feh_in, alphafe=alphafe_in, 
                 data_path=self.synth_path_blue, hash=self.hash_blue)
             
             #Make sure that the synthetic spectrum is within the data range for observations,
@@ -411,7 +476,7 @@ class MeasurePFSAbund():
             
             #Read in the synthetic spectrum from the red grid
             wvlr, synthr = read.io.read_interp_synth(teff=teff_in,
-                logg=self.logg, feh=feh_in, alphafe=alphafe_in, 
+                logg=logg_in, feh=feh_in, alphafe=alphafe_in, 
                 data_path=self.synth_path_red, start=6300., sstop=9100., 
                 hash=self.hash_red)
             
