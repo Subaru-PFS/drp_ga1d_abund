@@ -83,12 +83,7 @@ class MeasurePFSAbund():
         #known, the photometric estimate returned will not necessarily be valid and
         #will not subsequently be used
         
-        try: ut.io.get_phot(pfs, dm=self.dm, ddm=self.ddm)
-        except: 
-            pfs.assign(4300, 'teffphot')
-            pfs.assign(100., 'teffphoterr')
-            pfs.assign(1.5, 'loggphot')
-        
+        ut.io.get_phot(pfs, dm=self.dm, ddm=self.ddm)
         
         #Construct the spectral resolution as a function of wavelength, based on the different
         #modes of PFS 
