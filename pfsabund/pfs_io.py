@@ -36,6 +36,10 @@ import collections
 import hashlib
 import os
 
+
+
+
+
 _version = '0.0.4'
 
 #################################################################
@@ -178,12 +182,26 @@ class ReadPFSObject():
         
         self.hdu_dict['sky'] = 4
         self.hdu_dict['obs'] = 7
+
+        # MNI  -- BEGIN --
         
-        self.hdu_dict['obj_id'] = 1
-        self.hdu_dict['ra'] = 1
-        self.hdu_dict['dec'] = 1
-        self.hdu_dict['phot'] = 2
-            
+        # -- ORIGINAL --
+        #self.hdu_dict['obj_id'] = 1
+        #self.hdu_dict['ra'] = 1
+        #self.hdu_dict['dec'] = 1
+        #self.hdu_dict['phot'] = 2
+        # -- ORIGINAL -- 
+
+        
+        self.hdu_dict['obj_id'] = 3
+        self.hdu_dict['ra'] = 3
+        self.hdu_dict['dec'] = 3
+        self.hdu_dict['phot'] = 3
+    
+        
+        # MNI -- END --
+
+        
     def read_fits(self, catId, tract, patch, objId, visits, file_dir='.'):
     
         """
@@ -246,10 +264,33 @@ class ReadPFSObject():
         # into each spectral arm
         # Note that this information is necessary for continuum normalization
         
-        wavelength = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['wavelength']) #units of nm
-        wavelength *= nm_to_ang #convert from nm to Angstroms
-        flux = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['flux']) #units of nJy
-        std = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['ivar']) #units of nJy
+
+        # MNI -- BEGIN --
+        # -- ORIGINAL --
+
+        #wavelength = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['wavelength']) #units of nm
+
+        #wavelength *= nm_to_ang #convert from nm to Angstroms
+        
+        #flux = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['flux']) #units of nJy
+        #std = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['ivar']) #units of nJy
+
+        # -- ORIGINAL --
+
+        wavelength0 = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['wavelength']) #units of nm
+
+        wavelength0 *= nm_to_ang #convert from nm to Angstroms
+        flux0 = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['flux']) #units of nJy
+        std0 = hdu[self.hdu_dict['fluxtbl']].data.field(self.hdu_dict['ivar']) #units of nJy
+
+
+        filt = (np.isnan(flux0) == False) & (np.isnan(std0) == False)
+
+        wavelength = wavelength0[filt]
+        flux = flux0[filt]
+        std = std0[filt]
+        # MNI -- END -- 
+
         
         ## Is this actually the intensity error? That is, the error in units of nJy?
         ## Comparing to the values in the first element of HDU #3 (the covariance re-sampled
@@ -271,21 +312,40 @@ class ReadPFSObject():
         #Load in the targeting information contained in the PFS configuration file
         
         pfsDesignId = hdu[self.hdu_dict['obs']].data['pfsDesignId'][0]
-        hdu.close()
+
+        # MNI -- BEGIN --
+
+        # -- ORIGINAL --
+        #hdu.close()
        
-        visit0 = visits[-1]
-        config = '%s/pfsConfig-0x%016x-%06d.fits' % (file_dir, pfsDesignId, visit0)
-        hdu_config = fits.open(config)
+        #visit0 = visits[-1]
+        #config = '%s/pfsConfig-0x%016x-%06d.fits' % (file_dir, pfsDesignId, visit0)
+        #hdu_config = fits.open(config)
         
-        #Save information concerning object id and RA DEC position
-        obj_id = hdu_config[self.hdu_dict['obj_id']].data['objId'][0]
-        ra = hdu_config[self.hdu_dict['ra']].data['ra'][0]
-        dec = hdu_config[self.hdu_dict['dec']].data['dec'][0]
+        ##Save information concerning object id and RA DEC position
+        #obj_id = hdu_config[self.hdu_dict['obj_id']].data['objId'][0]
+        #ra = hdu_config[self.hdu_dict['ra']].data['ra'][0]
+        #dec = hdu_config[self.hdu_dict['dec']].data['dec'][0]
         
-        #Save photometric information
-        filters = hdu_config[self.hdu_dict['phot']].data['filterName']
-        mags = hdu_config[self.hdu_dict['phot']].data['fiberMag']
-        hdu_config.close()
+        ##Save photometric information
+        #filters = hdu_config[self.hdu_dict['phot']].data['filterName']
+        #mags = hdu_config[self.hdu_dict['phot']].data['fiberMag']
+        #hdu_config.close()
+
+
+        # -- ORIGINAL --
+        
+
+        obj_id = (hdu[self.hdu_dict['obj_id']].header)['OBJID']
+        ra = (hdu[self.hdu_dict['ra']].header)['RA']
+        dec = (hdu[self.hdu_dict['dec']].header)['DEC']
+        filters = hdu[self.hdu_dict['phot']].data['filterName']
+        mags = hdu[self.hdu_dict['phot']].data['fiberMag']
+        
+        hdu.close()
+
+        # MNI -- END --
+
         
         filter_names = np.array(['g', 'r', 'i', 'z', 'y'])
         filter_vals = np.array([mags[filters == filter_name][0] if filter_name in filters\
@@ -295,6 +355,8 @@ class ReadPFSObject():
         pfs.assign(obj_id, 'obj_id')
         pfs.assign(ra, 'ra')
         pfs.assign(dec, 'dec')
+
+
         
         #Assign the photometry to the PFS object dictionary
         pfs.assign(filter_vals, 'mag')
@@ -313,7 +375,19 @@ class ReadPFSObject():
         """
         
         #Assume that we have the distance to the star
+
+
         pfs.assign(np.nan, 'distance') #Distance to the star, based on RR Lyrae, Gaia, photometric parallax, etc.
+
+
+
+        # MNI -- BEGIN --
+        pfs.assign(np.nan, 'distance_error')
+        
+        # MNI -- END -- 
+
+
+
         
         #Assume that the velocity pipeline exists and we have all the outputs
         p_vhelio = np.zeros( (20,500) )
@@ -336,6 +410,10 @@ class ReadPFSObject():
         NOTE: These values will be assigned later in the development of the 
         PFS GA 1D pipeline
         """
+
+ 
+
+        
         
         #Assuming an array of ages of 6 - 13 Gyr in 1 Gyr increments
         nages = 8

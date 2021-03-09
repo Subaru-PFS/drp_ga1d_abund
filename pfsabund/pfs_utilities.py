@@ -49,6 +49,8 @@ class PFSUtilities():
     
         #Use a grid of stellar evolutionary models to infer the photometric
         #quantities via interpolation, or extrapolation as necessary
+
+        print(dm, ddm)
         phot_dict = phot.from_phot(pfs.prop('mag')[pfs.prop('filter') == 'i'], 
                                    pfs.prop('mag')[pfs.prop('filter') == 'g']-\
                                    pfs.prop('mag')[pfs.prop('filter') == 'i'], 
@@ -56,7 +58,8 @@ class PFSUtilities():
          
         #select an age to assume for the isochrones in the abundance measurement
         #process
-        age_i = 12                        
+        age_i = 12
+
         wage = np.where(np.round(phot_dict[0]['ages']/1.e9, decimals=0) == age_i)[0][0]
 
         #teff_phot_dummy = np.full( len(pfs.prop('teffphot')), 4100. )
@@ -175,6 +178,7 @@ class PFSUtilities():
             ##calculate the breakpoints of the spline
             break_points = self.calc_breakpoints(x[mask], npix) 
             #calculate the coefficients of the spline
+
             tck = splrep(x[mask], y[mask], w=innvar[mask], t=break_points)
             cont = splev(x, tck) #determine the continuum
     
@@ -261,6 +265,7 @@ class PFSUtilities():
             #the function considers only interior knots, end knots added automatically
             #returns tuple of knots, B-spline coefficients, and the degree of the spline
 
+
             bkpt, tck = self.slatec_splinefit(pfs.prop('wvl')[w][mask], pfs.prop('flux')[w][mask], 
                 pfs.prop('ivar')[w][mask], sigma_l, sigma_u, npix, maxiter)
                 
@@ -326,9 +331,20 @@ class PFSUtilities():
             pfs.assign(refinedcont, 'refinedcont')
             
             return
+
+    # MNI -- BEGIN --
+    # -- ORIGINAL --
+    #def check_mask_file_exists(self, filename='', path_blue='specregion/pfs/blue',
+    #    path_red='specregion/pfs/red', mode='lr', root='./'):
+    # -- ORIGINAL --
+
+    def check_mask_file_exists(self, filename = '', \
+                               path_blue = 'specregion/blue', \
+                               path_red = 'specregion/red', mode='lr', \
+                               root = os.path.dirname(__file__) + '/../'):
+
         
-    def check_mask_file_exists(self, filename='', path_blue='specregion/pfs/blue',
-        path_red='specregion/pfs/red', mode='lr', root='./'):
+    # MNI -- END
 
         """
         A helper function to check if a spectral mask exists, and if so, to open

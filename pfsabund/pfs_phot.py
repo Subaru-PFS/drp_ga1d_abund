@@ -16,9 +16,15 @@ import numpy as np
 import glob
 import sys
 
+# MNI --BEGIN--
+from scipy import interpolate
+import os
+
+# MNI --END--
+
 def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
              dm=None, ddm=None, extrap=True, enforce_bounds=False):
-             
+
     """
     PURPOSE: Calculate photometric metallicity with PARSEC isochrones.
     
@@ -87,7 +93,9 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
         mag_in = [mag_in]; color_in = [color_in]
         if err_mag_in is not None and err_color_in is not None:
             err_mag_in = [err_mag_in]; err_color_in = [err_color_in]
-            
+
+
+  
     mag_in = np.array(mag_in); color_in = np.array(color_in)
     err_mag_in = np.array(err_mag_in); err_color_in = np.array(err_color_in)
         
@@ -98,8 +106,19 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
         
     if ddm is not None: 
         err_mag_in = np.sqrt(err_mag_in**2. + ddm**2.)
+
+
+    # MNI
+
+    ## ORIGINAL
+    #iso_files = glob.glob(f'isochrones/feh_{filter}_*_{kind}.dat')
+    ## ORIGINAL
+
+    iso_files = glob.glob(os.path.dirname(__file__) + f'/../isochrones/feh_{filter}_*_{kind}.dat')
+    print(iso_files)
     
-    iso_files = glob.glob(f'isochrones/feh_{filter}_*_{kind}.dat')
+    # MNI
+    
     nages = len(iso_files)
     nmc = 1000
     
@@ -127,10 +146,19 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
         Zi, age, Te, logg, label, mag_blue, mag_red = np.loadtxt(file, skiprows=12, unpack=True, 
                                                                          usecols=usecols)
         feh_val = np.unique(Zi)
-            
+
+        # MNI -- BEGIN --
+        
+        age = 10**age
+
+        # MNI -- END --
+
+        
         print(f'{kind.upper()} isochrone set using {filter.upper()} filter, assuming age = '+\
         f'{str(int(np.unique(age)[0]/1.e9))} Gyr')
-            
+
+
+        
         mag_grid = []; clr_grid = []; feh_grid = []
         logt_grid = []; logg_grid = []
         
@@ -175,6 +203,9 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
         mag_grid = np.array(mag_grid); clr_grid = np.array(clr_grid)
         logg_grid = np.array(logg_grid); logt_grid = np.array(logt_grid)
         feh_grid = np.array(feh_grid)
+
+
+
         
         for jj in range(ndm):
   
@@ -199,9 +230,21 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
                 #Construct an interpolator that can extrapolate
                 #Note that griddata cannot extrapolate, but it is much more robust than *Spline functions
                 #*Spline functions very dependent on smoothing parameter s and can generate wild swings
-                f_t = SmoothBivariateSpline(clr_grid, mag_grid, logt_grid, kx=2, ky=2)
-                f_g = SmoothBivariateSpline(clr_grid, mag_grid, logg_grid, kx=2, ky=2)
-                f_f = SmoothBivariateSpline(clr_grid, mag_grid, feh_grid, kx=2, ky=2)
+
+                # ORIGINAL 
+                
+                #f_t = SmoothBivariateSpline(clr_grid, mag_grid, logt_grid, kx=2, ky=2)
+                #f_g = SmoothBivariateSpline(clr_grid, mag_grid, logg_grid, kx=2, ky=2)
+                #f_f = SmoothBivariateSpline(clr_grid, mag_grid, feh_grid, kx=2, ky=2)
+                # ORIGINAL
+
+                # MNI
+                f_t = interpolate.SmoothBivariateSpline(clr_grid, mag_grid, logt_grid, kx=2, ky=2)
+                f_g = interpolate.SmoothBivariateSpline(clr_grid, mag_grid, logg_grid, kx=2, ky=2)
+                f_f = interpolate.SmoothBivariateSpline(clr_grid, mag_grid, feh_grid, kx=2, ky=2)
+
+                # MNI
+                
                 
                 for ll in arg:
             
@@ -213,7 +256,10 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
                     logg_i[ll] = logg_l
                     feh_i[ll] = feh_l
                     t_i[ll] = 10**logt_l
-            
+
+
+
+        
             if enforce_bounds:
                 w = np.where( (feh_i < feh_grid.min()) | (feh_i > feh_grid.max()) )[0]
                 if len(w) > 0:
@@ -230,6 +276,8 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
             
             #LOOK AT THIS AS A POTENTIAL SOURCE OF THE ISSUE: WORKS FOR APOGEE, BUT DOES IT WORK FOR
             #PANDAS?
+
+            
             for iw in range(len(wdm)):
                 
                 phots[wdm[iw]]['feh'][kk] = feh_i[iw]
@@ -266,8 +314,19 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
 
                         logt_mc = griddata((clr_grid, mag_grid), logt_grid, (clr_mc, mag_mc), fill_value=-999.)
                         wgood = np.where( (10**logt_mc >= 3000.) & (10**logt_mc <= 10000) )[0]
+
                         
-                        print len(wgood)
+			# MNI -- BEGIN --
+
+                        # - ORIGINAL - 
+                        #print len(wgood)
+                        # - ORIGINAL -
+                        
+                        print(len(wgood))
+                        
+			# MNI -- END --
+
+
                         if len(wgood) > 2: 
                             phots[wdm[ii]]['err_teff'][kk] = np.std(10**logt_mc[wgood])
                         else:
@@ -296,6 +355,9 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
     
     #Sort the dictionary according to stellar age
     wsort = np.argsort(phots[0]['ages'])
+
+
+ 
     
     for i in range(len(phots)):
         

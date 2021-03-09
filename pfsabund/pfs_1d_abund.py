@@ -47,6 +47,14 @@ from pfsabund import pfs_utilities as ut
 from pfsabund import pfs_phot as phot
 import numpy as np
 
+
+# MNI -- BEGIN --
+import os
+from pfsabund import pfs_distance as dist
+# MNI -- END --
+
+
+
 ### Constants
 dlam_to_gauss = 1./2.35
 spec_res = {'blue': 2.1, 'redlr': 2.7, 'redmr': 1.6, 'nir': 2.4}
@@ -64,10 +72,26 @@ class MeasurePFSAbund():
     ([Fe/H], [alpha/Fe]) of PFS spectra. log_g is fixed to the photometric value OR
     can be varied as a free parameter using fit_logg=True
     """
+
+  
     
-    def __init__(self, pfs=None, mode=None, root='./', synth_path_blue='../gridie/',
-                 synth_path_red='../grid7/', dm=22., ddm=0.1, fit_logg=False):
+    # MNI -- BEGIN --
+
+    # - ORIGINAL
+    #def __init__(self, pfs=None, mode=None, root='./', synth_path_blue='../gridie/',
+    #             synth_path_red='../grid7/', dm=22., ddm=0.1, fit_logg=False):
+
     
+    def __init__(self, pfs=None, mode=None, root = \
+                 os.path.dirname(__file__) + '/../', \
+                 synth_path_blue = os.path.dirname(__file__) + '/../gridie/', \
+                 synth_path_red = os.path.dirname(__file__) + '/../grid7/', \
+                 dm=22., ddm=0.1, fit_logg=False):
+
+        
+        # MNI -- END --
+
+        
         """
         Create and initialize the attributes of the MeasurePFSAbund class
         """
@@ -77,6 +101,22 @@ class MeasurePFSAbund():
         self.dm = dm; self.ddm = ddm #distance modulus parameters
         self.synth_path_blue = synth_path_blue #directory pointing to blue grid
         self.synth_path_red = synth_path_red #directory pointing to red grid
+
+
+        # MNI -- BEGIN --
+
+
+        gaiaid, distance, distance_error = \
+            dist.estimate_dist(pfs.prop('ra'), pfs.prop('dec'), pfs.prop('mag'), pfs.prop('filter'))
+
+        
+        if pfs.prop('distance') != np.nan:
+            dm, ddm = \
+                dist.calc_dmod_from_distances(pfs.prop('distance'), pfs.prop('distance_error'))
+        # MNI -- END --
+
+
+
         
         #Calculate photometric quantities to take as input for the abundance pipeline
         #Note for the case of fit_logg=True where the distance modulus is not well
@@ -213,7 +253,8 @@ class MeasurePFSAbund():
                       
             aflux = pfs.prop('flux')[self.alphafe_fit_mask] /\
                     pfs.prop('refinedcont')[self.alphafe_fit_mask]
-    
+
+
             self.best_params1, self.covar1 = curve_fit(self.get_synth_step2, 
                                                        pfs.prop('wvl')[self.alphafe_fit_mask], 
                                                        aflux, p0=params1, sigma=asigma, 
@@ -221,8 +262,12 @@ class MeasurePFSAbund():
                                                        absolute_sigma=True, ftol=1.e-10, 
                                                        gtol=1.e-10, xtol=1.e-10)
                                                        
+            
+            self.best_params1 = params1
+
             self.alphafe = self.best_params1[0]
 
+            
             #Construct the best-fit synthetic spectrum from the best fit parameters
             best_synth = self.get_best_synth(wvl_obs=pfs.prop('wvl'))
             
@@ -284,12 +329,17 @@ class MeasurePFSAbund():
         
         aflux = pfs.prop('flux')[self.alphafe_fit_mask] / pfs.prop('refinedcont')[self.alphafe_fit_mask]
         asigma = (pfs.prop('ivar')[self.alphafe_fit_mask] * pfs.prop('refinedcont')[self.alphafe_fit_mask]**2.)**(-0.5)
-    
+
+
         self.best_params3, self.covar3 = curve_fit(self.get_synth_step4, pfs.prop('wvl')[self.alphafe_fit_mask],
-                                                   aflux, p0=params3, sigma=asigma,
-                                                   bounds=([-0.8],[1.2]), absolute_sigma=True, 
-                                                   ftol=1.e-10, gtol=1.e-10, xtol=1.e-10)
-                                                   
+                                                    aflux, p0=params3, sigma=asigma,
+                                                    bounds=([-0.8],[1.2]), absolute_sigma=True, 
+                                                    ftol=1.e-10, gtol=1.e-10, xtol=1.e-10)
+
+        
+        self.best_params3 = params3
+
+        
         #### Recalculate the metallicity a final time ####
         
         params4 = [self.feh_def]
@@ -305,8 +355,11 @@ class MeasurePFSAbund():
         pfs.assign(self.best_params3[0], 'alphafe')
                                                     
         pfs.assign(np.sqrt(np.diag(self.covar0)[0]), 'tefferr')
+
         pfs.assign(np.sqrt(np.diag(self.covar4)[0]), 'feherr')
         pfs.assign(np.sqrt(np.diag(self.covar3)[0]), 'alphafeerr')
+
+
         
         if fit_logg:
             pfs.assign(np.sqrt(np.diag(self.covar0)[-1]), 'loggerr')
@@ -457,7 +510,9 @@ class MeasurePFSAbund():
         
         #If observational data exists in the wavelength range of the blue grid
         if len(self.wb) > 0:
-        
+
+
+            
             #Read in the synthetic spectrum from the blue grid
             wvlb, synthb = read.io.read_interp_synth(teff=teff_in,
                 logg=logg_in, feh=feh_in, alphafe=alphafe_in, 

@@ -49,7 +49,9 @@ class ReadSynth():
         else:
             directory = 'bin/'
             step = 0.14
-    
+
+
+            
         #Check if the parameters are specified, if the filename is not
         if np.all(np.isnan([Teff,Logg,Feh,Alphafe])) == True:
             sys.stderr.write("Error: must define teff, logg, feh, and alphafe")
@@ -150,13 +152,27 @@ class ReadSynth():
         """
     
         #Define the points of the 4D grid
-        teff_arr = np.append(np.arange(3500., 5600., 100.), np.arange(5600., 8200., 200.))
-        teff_arr = np.round(np.array(teff_arr), decimals=0)
+
+
+        # MNI  -- BEGIN --
+        # -- ORIGINAL --
+        #teff_arr = np.append(np.arange(3500., 5600., 100.), np.arange(5600., 8200., 200.))
+        #teff_arr = np.round(np.array(teff_arr), decimals=0)
     
-        logg_arr = np.round(np.arange(0., 5.5, 0.5), decimals=1)
-        feh_arr = np.round(np.arange(-5., 0.1, 0.1), decimals=2)
-        alphafe_arr = np.round(np.arange(-0.8, 1.3, 0.1), decimals=2)
-        alphafe_arr[8] = 0.
+        #logg_arr = np.round(np.arange(0., 5.5, 0.5), decimals=1)
+        #feh_arr = np.round(np.arange(-5., 0.1, 0.1), decimals=2)
+        #alphafe_arr = np.round(np.arange(-0.8, 1.3, 0.1), decimals=2)
+        #alphafe_arr[8] = 0.
+        # -- ORIGINAL --
+
+       
+        teff_arr = np.arange(4000., 4300., 100.)
+        teff_arr = np.round(np.array(teff_arr), decimals=0)
+
+        logg_arr = np.round(np.arange(1.0, 2.0, 0.5), decimals=1)
+        feh_arr = np.round(np.arange(-2., 0.0, 1.0), decimals=2)
+        alphafe_arr = np.round(np.arange(0.0, 1.0, 1.0), decimals=2)
+        # MNI -- END
     
         #First check that given synthetic spectrum parameters are in range
         in_grid = self.enforce_grid_check(teff, logg, feh, alphafe)
