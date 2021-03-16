@@ -335,7 +335,7 @@ class MeasurePFSAbund():
                                                     ftol=1.e-10, gtol=1.e-10, xtol=1.e-10)
 
         
-        self.best_params3 = params3
+
 
         
         #### Recalculate the metallicity a final time ####
