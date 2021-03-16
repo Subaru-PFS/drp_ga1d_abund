@@ -262,8 +262,6 @@ class MeasurePFSAbund():
                                                        absolute_sigma=True, ftol=1.e-10, 
                                                        gtol=1.e-10, xtol=1.e-10)
                                                        
-            
-            self.best_params1 = params1
 
             self.alphafe = self.best_params1[0]
 
