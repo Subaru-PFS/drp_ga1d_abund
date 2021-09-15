@@ -1,5 +1,5 @@
 """
-@author: I. Escala (Caltech, Princeton)
+@author: I. Escala (Carnegie, Princeton)
 
 Shell of the PFS GA 1D Pipeline.
 Generates a PFS object dictionary initialized with inputs and outputs of the abundance
@@ -40,7 +40,7 @@ import os
 
 
 
-_version = '0.0.4'
+_version = '0.0.5'
 
 #################################################################
 #################################################################
