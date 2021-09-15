@@ -115,7 +115,6 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
     ## ORIGINAL
 
     iso_files = glob.glob(os.path.dirname(__file__) + f'/../isochrones/feh_{filter}_*_{kind}.dat')
-    print(iso_files)
     
     # MNI
     
