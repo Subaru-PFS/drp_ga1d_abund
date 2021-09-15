@@ -119,9 +119,17 @@ class MeasurePFSAbund():
         #Construct the spectral resolution as a function of wavelength, based on the different
         #modes of PFS
 
-        dlam = [ spec_res['blue'] if (pix > spec_coverage['blue'+self.mode][0]) and\
-                (pix < spec_coverage['blue'+self.mode][1]) else spec_res['red'+self.mode]\
-                for pix in pfs.prop('wvl') ]
+        dlam = np.zeros(pfs.prop('wvl').size)
+        wb_pfs = (pfs.prop('wvl') >= spec_coverage['blue'+self.mode][0]) &\
+                 (pfs.prop('wvl') <= spec_coverage['blue'+self.mode][1])
+        wr_pfs = (pfs.prop('wvl') >= spec_coverage['red'+self.mode][0]) &\
+                 (pfs.prop('wvl') <= spec_coverage['red'+self.mode][1])
+        wn_pfs = (pfs.prop('wvl') >= spec_coverage['nir'][0]) &\
+                 (pfs.prop('wvl') <= spec_coverage['nir'][1])
+
+        dlam[wb_pfs] = spec_res['blue']
+        dlam[wr_pfs] = spec_res['red'+self.mode]
+        dlam[wn_pfs] = spec_res['nir']
 
         #convert from FWHM to Gaussian width for use with abundance measurement pipeline
         dlam = np.array(dlam)*dlam_to_gauss
@@ -180,7 +188,14 @@ class MeasurePFSAbund():
 
         #Perform an initial continuum normalization, using KeckII/DEIMOS 600ZD style
         #normalization of Escala et al. 2019a as an approximation
-        ut.io.continuum_normalize(pfs)
+
+        contb = ut.io.continuum_normalize(pfs, wavelength_range=spec_coverage['blue'+self.mode])
+        contr = ut.io.continuum_normalize(pfs, wavelength_range=spec_coverage['red'+self.mode])
+        #contnir = ut.io.continuum_normalize(pfs, wavelength_range=spec_coverage['nir'])
+
+        #initcont = np.concatenate((contb, contr, contnir))
+        initcont = np.concatenate((contb, contr))
+        pfs.assign(initcont, 'initcont')
 
         i = 0
         pfs.assign(pfs.prop('initcont'), 'refinedcont')
@@ -278,7 +293,28 @@ class MeasurePFSAbund():
             best_synth = self.get_best_synth(wvl_obs=pfs.prop('wvl'))
 
             #Refine the continuum based on these parameters
-            ut.io.continuum_refinement(pfs, best_synth)
+
+            if len(self.wb) > 0:
+                refcontb = ut.io.continuum_refinement(pfs, best_synth,
+                           wavelength_range=spec_coverage['blue'+self.mode],
+                           mask_ranges=mask_ranges)
+            else:
+                refcontb = np.full(4096, np.nan)
+
+            if len(self.wr) > 0:
+                refcontr = ut.io.continuum_refinement(pfs, best_synth,
+                           wavelength_range=spec_coverage['red'+self.mode],
+                           mask_ranges=mask_ranges)
+            else:
+                refcontr = np.full(4096, np.nan)
+
+            #Set to NaN for now because we do not have NIR synthetic spectral grid
+            #refcontnir = np.full(4096, np.nan)
+
+            #refinedcont = np.concatenate((refcontb, refcontr, refcontnir))
+            refinedcont = np.concatenate((refcontb, refcontr))
+
+            pfs.assign(refinedcont, 'refinedcont')
 
             #Check if the continuum iteration has converged
 
@@ -406,6 +442,10 @@ class MeasurePFSAbund():
         print(pfs.prop('tefferr'), pfs.prop('loggerr'), pfs.prop('feherr'), pfs.prop('alphafeerr'))
 
         return
+
+####################################################################################################
+####################################################################################################
+
 
     def get_synth_step5(self, wvl_fit=None, feh_fit=None):
 
