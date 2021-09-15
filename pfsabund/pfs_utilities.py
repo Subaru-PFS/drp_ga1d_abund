@@ -315,7 +315,7 @@ class PFSUtilities():
 
             mask[ np.where( (fluxi > 0.) & (ivari > 0.) &\
                   np.isfinite(ivari) & np.invert(np.isnan(ivari)) &\
-                 (synth > 0.) & np.invert(np.isnan(synth)) ) ] = True
+                 (synthi > 0.) & np.invert(np.isnan(synthi)) ) ] = True
 
             #Mask the telluric regions
             for tell in tell_mask:
@@ -331,8 +331,8 @@ class PFSUtilities():
             mask[0:4] = False; mask[-5:-1] = False
 
             bkpt, tck = self.slatec_splinefit(pfs.prop('wvl')[w][mask],
-                                              fluxi[mask]/synth[mask],
-                                              ivari[mask] * synth[mask]**2.,
+                                              fluxi[mask]/synthi[mask],
+                                              ivari[mask] * synthi[mask]**2.,
                                               sigma_l, sigma_u, npix, maxiter)
 
             noise_spectrum = splev(pfs.prop('wvl')[w], tck)
