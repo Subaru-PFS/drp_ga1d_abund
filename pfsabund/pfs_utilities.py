@@ -230,7 +230,6 @@ class PFSUtilities():
                       (pfs.prop('wvl') < wavelength_range[1]) )[0]
 
         m = len(pfs.prop('wvl')[w])
-        print(m)
         #Check if the number of data points is larger than the degree of the spline
         if m < k:
             sys.stderr.write(f'Fewer data points (m = {m}) than degree of spline (k = {k})\n')
@@ -299,7 +298,6 @@ class PFSUtilities():
                       (pfs.prop('wvl') < wavelength_range[1]) )[0]
 
         m = len(pfs.prop('wvl')[w])
-        print(m)
         #Check if the number of data points is larger than the degree of the spline
         if m < k:
             sys.stderr.write(f'Fewer data points (m = {m}) than degree of spline (k = {k})\n')
