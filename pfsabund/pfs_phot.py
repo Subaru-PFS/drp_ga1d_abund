@@ -115,12 +115,7 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
     ## ORIGINAL
 
     iso_files = glob.glob(os.path.dirname(__file__) + f'/../isochrones/feh_{filter}_*_{kind}.dat')
-<<<<<<< HEAD
-    print(iso_files)
 
-=======
-    
->>>>>>> f83ec2c3f5005ac6872b11370380b71fb819060f
     # MNI
 
     nages = len(iso_files)
@@ -318,17 +313,6 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
 
                         logt_mc = griddata((clr_grid, mag_grid), logt_grid, (clr_mc, mag_mc), fill_value=-999.)
                         wgood = np.where( (10**logt_mc >= 3000.) & (10**logt_mc <= 10000) )[0]
-
-
-			# MNI -- BEGIN --
-
-                        # - ORIGINAL -
-                        #print len(wgood)
-                        # - ORIGINAL -
-
-                        print(len(wgood))
-
-			# MNI -- END --
 
 
                         if len(wgood) > 2:
