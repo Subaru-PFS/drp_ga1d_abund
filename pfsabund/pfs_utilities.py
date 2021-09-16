@@ -68,7 +68,7 @@ class PFSUtilities():
         pfs.assign(teffphoterr, 'teffphoterr')
 
         loggphoterr = np.nanmax([phot_dict[0]['err_logg'][wage], 0.1])
-        pfs.assign(loggphoterr, 'loggerr')
+        pfs.assign(loggphoterr, 'loggphoterr')
 
         return
 
@@ -227,9 +227,10 @@ class PFSUtilities():
 
         #Select the regions within the above specified range
         w = np.where( (pfs.prop('wvl') >= wavelength_range[0]) &\
-                      (pfs.prop('wvl') <= wavelength_range[1]) )[0]
+                      (pfs.prop('wvl') < wavelength_range[1]) )[0]
 
         m = len(pfs.prop('wvl')[w])
+        print(m)
         #Check if the number of data points is larger than the degree of the spline
         if m < k:
             sys.stderr.write(f'Fewer data points (m = {m}) than degree of spline (k = {k})\n')
@@ -295,9 +296,10 @@ class PFSUtilities():
 
         #Select the regions within the above specified range
         w = np.where( (pfs.prop('wvl') >= wavelength_range[0]) &\
-                      (pfs.prop('wvl') <= wavelength_range[1]) )[0]
+                      (pfs.prop('wvl') < wavelength_range[1]) )[0]
 
         m = len(pfs.prop('wvl')[w])
+        print(m)
         #Check if the number of data points is larger than the degree of the spline
         if m < k:
             sys.stderr.write(f'Fewer data points (m = {m}) than degree of spline (k = {k})\n')
@@ -348,8 +350,8 @@ class PFSUtilities():
     # -- ORIGINAL --
 
     def check_mask_file_exists(self, filename = '', \
-                               path_blue = 'specregion/blue', \
-                               path_red = 'specregion/red', mode='lr', \
+                               path_blue = 'specregion/pfs/blue', \
+                               path_red = 'specregion/pfs/red', mode='lr', \
                                root = os.path.dirname(__file__) + '/../'):
 
 

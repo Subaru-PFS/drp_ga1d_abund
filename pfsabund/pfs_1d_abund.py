@@ -55,8 +55,8 @@ from pfsabund import pfs_distance as dist
 ### Constants
 dlam_to_gauss = 1./2.35
 spec_res = {'blue': 2.1, 'redlr': 2.7, 'redmr': 1.6, 'nir': 2.4}
-spec_coverage = {'bluemr': [3800., 6500.], 'redlr': [6300., 9700.], 'redmr': [7100., 8850.],
-                 'nir': [9400., 12600.], 'bluelr': [3800., 6300.]}
+spec_coverage = {'bluemr': [3800., 6500.], 'redlr': [6500., 9400.], 'redmr': [7100., 8850.],
+                 'nir': [9400., 12600.], 'bluelr': [3800., 6500.]}
 flex_factor = 400.
 
 #################################################################
@@ -121,11 +121,11 @@ class MeasurePFSAbund():
 
         dlam = np.zeros(pfs.prop('wvl').size)
         wb_pfs = (pfs.prop('wvl') >= spec_coverage['blue'+self.mode][0]) &\
-                 (pfs.prop('wvl') <= spec_coverage['blue'+self.mode][1])
+                 (pfs.prop('wvl') < spec_coverage['blue'+self.mode][1])
         wr_pfs = (pfs.prop('wvl') >= spec_coverage['red'+self.mode][0]) &\
-                 (pfs.prop('wvl') <= spec_coverage['red'+self.mode][1])
+                 (pfs.prop('wvl') < spec_coverage['red'+self.mode][1])
         wn_pfs = (pfs.prop('wvl') >= spec_coverage['nir'][0]) &\
-                 (pfs.prop('wvl') <= spec_coverage['nir'][1])
+                 (pfs.prop('wvl') < spec_coverage['nir'][1])
 
         dlam[wb_pfs] = spec_res['blue']
         dlam[wr_pfs] = spec_res['red'+self.mode]
@@ -191,10 +191,10 @@ class MeasurePFSAbund():
 
         contb = ut.io.continuum_normalize(pfs, wavelength_range=spec_coverage['blue'+self.mode])
         contr = ut.io.continuum_normalize(pfs, wavelength_range=spec_coverage['red'+self.mode])
-        #contnir = ut.io.continuum_normalize(pfs, wavelength_range=spec_coverage['nir'])
+        contnir = ut.io.continuum_normalize(pfs, wavelength_range=spec_coverage['nir'])
 
-        #initcont = np.concatenate((contb, contr, contnir))
-        initcont = np.concatenate((contb, contr))
+        initcont = np.concatenate((contb, contr, contnir))
+        #initcont = np.concatenate((contb, contr))
         pfs.assign(initcont, 'initcont')
 
         i = 0
@@ -274,6 +274,7 @@ class MeasurePFSAbund():
                                np.sqrt(flex_factor/npix_fita),
                                pfs.prop('loggphoterr')])
 
+
             #asigma = (pfs.prop('ivar')[self.alphafe_fit_mask] *\
             #          pfs.prop('refinedcont')[self.alphafe_fit_mask]**2. )**(-0.5)
 
@@ -296,23 +297,21 @@ class MeasurePFSAbund():
 
             if len(self.wb) > 0:
                 refcontb = ut.io.continuum_refinement(pfs, best_synth,
-                           wavelength_range=spec_coverage['blue'+self.mode],
-                           mask_ranges=mask_ranges)
+                           wavelength_range=spec_coverage['blue'+self.mode])
             else:
                 refcontb = np.full(4096, np.nan)
 
             if len(self.wr) > 0:
                 refcontr = ut.io.continuum_refinement(pfs, best_synth,
-                           wavelength_range=spec_coverage['red'+self.mode],
-                           mask_ranges=mask_ranges)
+                           wavelength_range=spec_coverage['red'+self.mode])
             else:
                 refcontr = np.full(4096, np.nan)
 
             #Set to NaN for now because we do not have NIR synthetic spectral grid
-            #refcontnir = np.full(4096, np.nan)
+            refcontnir = np.full(4096, np.nan)
 
-            #refinedcont = np.concatenate((refcontb, refcontr, refcontnir))
-            refinedcont = np.concatenate((refcontb, refcontr))
+            refinedcont = np.concatenate((refcontb, refcontr, refcontnir))
+            #refinedcont = np.concatenate((refcontb, refcontr))
 
             pfs.assign(refinedcont, 'refinedcont')
 
@@ -431,6 +430,8 @@ class MeasurePFSAbund():
 
         if fit_logg:
             pfs.assign(np.sqrt(np.diag(self.covar0)[-1]), 'loggerr')
+        else:
+            pfs.assign(pfs.prop('loggphoterr'), 'loggerr')
 
         best_synth_final = self.get_best_synth(wvl_obs=pfs.prop('wvl'), teff=pfs.prop('teff'),
                                                feh=pfs.prop('feh'), logg=pfs.prop('logg'),
@@ -455,7 +456,10 @@ class MeasurePFSAbund():
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
         if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray):
-            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, self.dlam[self.feh_fit_mask])
+            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit[2:],
+            self.dlam[self.feh_fit_mask])
+
+        synthi = np.insert(synthi, 0, [self.teff, self.logg])
 
         return synthi
 
@@ -471,7 +475,8 @@ class MeasurePFSAbund():
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
         if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray):
-            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, self.dlam[self.alphafe_fit_mask])
+            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit[2:],
+            self.dlam[self.alphafe_fit_mask])
 
         synthi = np.insert(synthi, 0, [self.teff, self.logg])
 
@@ -489,7 +494,8 @@ class MeasurePFSAbund():
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
         if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray):
-            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, self.dlam[self.feh_fit_mask])
+            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit[2:],
+            self.dlam[self.feh_fit_mask])
 
         synthi = np.insert(synthi, 0, [self.teff, self.logg])
 
@@ -532,7 +538,7 @@ class MeasurePFSAbund():
         #Assume that the spectral resolution is constant for a given arm of PFS
 
         if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray):
-            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit[1:],
+            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit[2:],
                 self.dlam[self.feh_fit_mask])
 
         #Insert the effective temperature and logg pixel to the beginning of the synthetic spectrum
@@ -556,7 +562,7 @@ class MeasurePFSAbund():
 
             #Smooth the synthetic spectrum according to the spectral resolution
             if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray):
-                synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit,
+                synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit[2:],
                     self.dlam[self.alphafe_fit_mask])
 
             synthi = np.insert(synthi, 0, [self.teff, self.logg])
