@@ -115,8 +115,12 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
     ## ORIGINAL
 
     iso_files = glob.glob(os.path.dirname(__file__) + f'/../isochrones/feh_{filter}_*_{kind}.dat')
+<<<<<<< HEAD
     print(iso_files)
 
+=======
+    
+>>>>>>> f83ec2c3f5005ac6872b11370380b71fb819060f
     # MNI
 
     nages = len(iso_files)
