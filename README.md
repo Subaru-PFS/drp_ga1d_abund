@@ -31,7 +31,10 @@ You also must use the wavelength masks constructed for each arm of PFS contained
 
 Dependencies: 
 ASTROPY (http://www.astropy.org/), astroquery (https://pypi.org/project/astroquery/)
+F2PY3 (https://numpy.org/doc/stable/f2py/)
 
-Usage: 
+Installations:
+Run "make all" to compile the pfsabund/smooth_gauss.f Fortran code.  f2py3 is a prerequisite.
+
+Usage:
 See Jupyter iPython notebook for an example.
-
