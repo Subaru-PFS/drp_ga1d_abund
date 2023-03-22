@@ -44,15 +44,19 @@ from __future__ import absolute_import
 from scipy.optimize import curve_fit
 from pfsabund import pfs_read_synth as read
 from pfsabund import pfs_utilities as ut
-from pfsabund import pfs_phot as phot
+#from pfsabund import pfs_phot as phot
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 # MNI -- BEGIN --
 import os
 from pfsabund import pfs_distance as dist
 # MNI -- END --
 
+# ENK -- BEGIN --
+from lsfconv.psf import *
+from lsfconv.resampling.fluxconservingresampler import FluxConservingResampler
+# ENK -- END --
 
 
 ### Constants
@@ -84,14 +88,14 @@ class MeasurePFSAbund():
     
     def __init__(self, pfs=None, mode=None, root = \
                  os.path.dirname(__file__) + '/../', \
-                 synth_path_blue = os.path.dirname(__file__) + '/../gridie/', \
-                 synth_path_red = os.path.dirname(__file__) + '/../grid7/', \
+                 synth_path_blue = '/raid/gridie/', \
+                 synth_path_red = '/raid/grid7/', \
                  dm=22., ddm=0.1, fit_logg=False):
 
         
         # MNI -- END --
 
-        
+
         """
         Create and initialize the attributes of the MeasurePFSAbund class
         """
@@ -123,7 +127,7 @@ class MeasurePFSAbund():
         #known, the photometric estimate returned will not necessarily be valid and
         #will not subsequently be used
         
-        ut.io.get_phot(pfs, dm=self.dm, ddm=self.ddm)
+        #ut.io.get_phot(pfs, dm=self.dm, ddm=self.ddm)       #ENK: Commented this out to save time while debugging.  Need to uncomment to get Teff guess from photometry.
         
         #Construct the spectral resolution as a function of wavelength, based on the different
         #modes of PFS 
@@ -134,6 +138,7 @@ class MeasurePFSAbund():
         
         #convert from FWHM to Gaussian width for use with abundance measurement pipeline
         dlam = np.array(dlam)*dlam_to_gauss 
+        self.wvl = pfs.prop('wvl')          #ENK - save wvl array for use in get_synth functions
         self.dlam = dlam
         
         #Initialize a hash table to use to store the synthetic spectral data in memory
@@ -151,12 +156,16 @@ class MeasurePFSAbund():
         #Store initial guess values in new variables
         self.feh0 = self.feh_def
         self.alphafe0 = self.alphafe_def
-        self.teff0 = pfs.prop('teffphot')
+        #self.teff0 = pfs.prop('teffphot')
+        self.teff0 = 4210.   #ENK: changed Teff to match "true" value
+        #self.tefferr0 = pfs.prop('teffphoterr')   #ENK: new property tefferr0
+        self.tefferr0 = 0.0001                          #ENK: arbitrary value
         
         #If fitting for the surface gravity, set logg to the default value
         #otherwise, fix to the photometric value
         if fit_logg: self.logg0 = self.logg_def
-        else: self.logg = pfs.prop('loggphot')
+        #else: self.logg = pfs.prop('loggphot')
+        else: self.logg = 1.3   #ENK: changed Teff to match "true" value
         
         #Execute abundance measurement
         self.measure_abund(pfs, fit_logg=fit_logg)
@@ -174,8 +183,9 @@ class MeasurePFSAbund():
         #Construct the spectral masks to measure [Fe/H] and [alpha/Fe] abundances
         #from wavelength regions sensitive to a given elemental abundance
         feh_fit_mask, alphafe_fit_mask, spec_mask = self.fit_masks(pfs)
-        self.feh_fit_mask = feh_fit_mask
-        self.alphafe_fit_mask = alphafe_fit_mask
+
+        self.feh_fit_mask = feh_fit_mask & spec_mask            #ENK: added & spec_mask
+        self.alphafe_fit_mask = alphafe_fit_mask & spec_mask    #ENK: added & spec_mask
         
         #Identify whether there is wavelength information in the blue and/or red
         #synthetic spectra ranges
@@ -193,6 +203,11 @@ class MeasurePFSAbund():
         
         i = 0
         pfs.assign(pfs.prop('initcont'), 'refinedcont')
+
+        #ENK -- BEGIN --
+        gauss = GaussPsf(pfs.prop('wvl'), sigma=self.dlam)
+        self.pca = PcaPsf.from_psf(gauss, pfs.prop('wvl'))
+        #ENK -- END --
         
         while i < self.maxiter:
         
@@ -213,7 +228,7 @@ class MeasurePFSAbund():
             #and the inverse variance array
             flux_teff = np.insert(pfs.prop('flux')[self.feh_fit_mask] /\
                                   pfs.prop('refinedcont')[self.feh_fit_mask],
-                                  0, pfs.prop('teffphot'))
+                                  0, self.teff0)   #ENK: change pfs.prop('teffphot') to self.teff0
                                   
             wvl_teff = np.insert(pfs.prop('wvl')[self.feh_fit_mask], 0, 
                                  pfs.prop('wvl')[self.feh_fit_mask][0])
@@ -222,8 +237,8 @@ class MeasurePFSAbund():
                             pfs.prop('refinedcont')[self.feh_fit_mask]**2. )**(-0.5)
                             
             npix_fit = float(len(sigma_teff0))
-            sigma_teff = np.insert(sigma_teff0, 0, pfs.prop('teffphoterr') *\
-                                   np.sqrt(flex_factor/npix_fit))
+            sigma_teff = np.insert(sigma_teff0, 0, self.tefferr0 *\
+                                   np.sqrt(flex_factor/npix_fit))          #ENK: change pfs.prop('teffphoterr') to self.tefferr0
 
             #If surface gravity is a free parameter
             if fit_logg:
@@ -245,6 +260,12 @@ class MeasurePFSAbund():
                                                            gtol=1.e-10, xtol=1.e-10)
                                                            
                 self.teff, self.feh = self.best_params0
+                synth1 = self.get_synth_step1(wvl_teff, self.teff, self.feh, logg_fit=None)   #ENK: get the best-fit synthetic spectrum from step 1
+                plt.plot(wvl_teff[1:], flux_teff[1:], marker='+', linestyle='None')           #ENK
+                #plt.plot(wvl_teff[1:], sigma_teff[1:], marker='+', linestyle='None')          #ENK
+                plt.plot(wvl_teff[1:], synth1[1:], marker='+', linestyle='None')              #ENK
+                #plt.xlim([8450, 8700])                                                        #ENK
+                plt.show()                                                                    #ENK
                 
                                                      
             #Perform the fit [alpha/Fe]
@@ -262,6 +283,8 @@ class MeasurePFSAbund():
                                                        absolute_sigma=True, ftol=1.e-10, 
                                                        gtol=1.e-10, xtol=1.e-10)
                                                        
+            
+            #self.best_params1 = params1     #ENK: Commented this out.  I'm not sure why it was here.  It was preventing [alpha/Fe] from being fit.
 
             self.alphafe = self.best_params1[0]
 
@@ -271,6 +294,14 @@ class MeasurePFSAbund():
             
             #Refine the continuum based on these parameters
             ut.io.continuum_refinement(pfs, best_synth)
+
+            #PLOTING SPECTRA + TEMPLATE (BEST_FIT)
+            #plt.plot(pfs['wvl'][self.feh_fit_mask], pfs['flux'][self.feh_fit_mask] / pfs['refinedcont'][self.feh_fit_mask], marker='.')
+            #plt.plot(pfs['wvl'][self.feh_fit_mask], best_synth[self.feh_fit_mask], marker='.')
+            #plt.plot(pfs['wvl'], pfs['flux'] / pfs['refinedcont'], marker='.', linestyle='None')
+            #plt.plot(pfs['wvl'], best_synth, marker='.', linestyle='None')
+            #plt.xlim([5000, 5300])
+            #plt.show()
             
             #Check if the continuum iteration has converged
             
@@ -310,7 +341,7 @@ class MeasurePFSAbund():
           
         ## Re-determine the metallicity ###
         
-        params2 = [self.feh_def]
+        params2 = [self.feh]    #ENK: changed feh_def to feh
         
         fflux = pfs.prop('flux')[self.feh_fit_mask] / pfs.prop('refinedcont')[self.feh_fit_mask]
         fsigma = ( pfs.prop('ivar')[self.feh_fit_mask] * pfs.prop('refinedcont')[self.feh_fit_mask]**2. )**(-0.5)
@@ -323,7 +354,7 @@ class MeasurePFSAbund():
                                         
         #### Now re-determine the total alpha abundance of the atmosphere ####
         
-        params3 = [self.alphafe_def]
+        params3 = [self.alphafe]    #ENK: changed alphafe_def to alphafe
         
         aflux = pfs.prop('flux')[self.alphafe_fit_mask] / pfs.prop('refinedcont')[self.alphafe_fit_mask]
         asigma = (pfs.prop('ivar')[self.alphafe_fit_mask] * pfs.prop('refinedcont')[self.alphafe_fit_mask]**2.)**(-0.5)
@@ -335,12 +366,12 @@ class MeasurePFSAbund():
                                                     ftol=1.e-10, gtol=1.e-10, xtol=1.e-10)
 
         
-
+        #self.best_params3 = params3     #ENK: Commented this out.  I'm not sure why it was here.  It was preventing [alpha/Fe] from being fit.
 
         
         #### Recalculate the metallicity a final time ####
         
-        params4 = [self.feh_def]
+        params4 = [self.best_params2[0]]    #ENK: changed feh_def to best_params2[0]
 
         self.best_params4, self.covar4 = curve_fit(self.get_synth_step5, pfs.prop('wvl')[self.feh_fit_mask], 
                                                     fflux, p0=params4, sigma=fsigma, 
@@ -375,15 +406,20 @@ class MeasurePFSAbund():
     
     def get_synth_step5(self, wvl_fit=None, feh_fit=None):
     
-        #Read in the synthetic spectrum
-        wvl, synth = self.construct_synth(wvl_fit, self.teff, feh_fit, self.logg,
+        #Read in the synthetic spectrum - ENK: wvl_fit -> self.wvl
+        wvl, synthi = self.construct_synth(self.wvl, self.teff, feh_fit, self.logg,
                                           self.best_params3[0])
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
-        if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray): 
-            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, self.dlam[self.feh_fit_mask])
-
-        return synthi
+        #ENK -- BEGIN --
+        #if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray): 
+            #synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, self.dlam[self.feh_fit_mask])
+            #cwave, cflux, _, _ = self.pca_feh.convolve(wvl, synth)
+            #res = FluxConservingResampler()
+            #synthi, _ = res.resample_value(cwave, None, cflux, target_wave=wvl_fit)
+        #ENK -- END --
+            
+        return synthi[self.feh_fit_mask]   #ENK - limit the spectrum to the feh regions
     
     def get_synth_step4(self, wvl_fit=None, alphafe_fit=None):
         """
@@ -391,15 +427,20 @@ class MeasurePFSAbund():
         the metallicity is held constant at the previously determined value, and the [alpha/Fe] 
         is re-determined based on the revised observed spectrum
         """
-        #Read in the synthetic spectrum
-        wvl, synth = self.construct_synth(wvl_fit, self.teff, self.best_params2[0], self.logg, 
+        #Read in the synthetic spectrum - ENK: wvl_fit -> self.wvl
+        wvl, synthi = self.construct_synth(self.wvl, self.teff, self.best_params2[0], self.logg, 
                                           alphafe_fit)
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
-        if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray): 
-            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, self.dlam[self.alphafe_fit_mask])
+        #ENK -- BEGIN --
+        #if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray): 
+            #synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, self.dlam[self.alphafe_fit_mask])
+            #cwave, cflux, _, _ = self.pca_alphafe.convolve(wvl, synth)
+            #res = FluxConservingResampler()
+            #synthi, _ = res.resample_value(cwave, None, cflux, target_wave=wvl_fit)
+        #ENK -- END --
 
-        return synthi
+        return synthi[self.alphafe_fit_mask]   #ENK: limit the spectrum to the alphafe regions
 
     def get_synth_step3(self, wvl_fit=None, feh_fit=None):
         """
@@ -408,14 +449,19 @@ class MeasurePFSAbund():
         based on the revised observed spectrum
         """
         
-        #Read in the synthetic spectrum
-        wvl, synth = self.construct_synth(wvl_fit, self.teff, feh_fit, self.logg, self.alphafe)
+        #Read in the synthetic spectrum - ENK: wvl_fit -> self.wvl
+        wvl, synthi = self.construct_synth(self.wvl, self.teff, feh_fit, self.logg, self.alphafe)
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
-        if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray): 
-            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, self.dlam[self.feh_fit_mask])
+        #ENK -- BEGIN --
+        #if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray): 
+            #synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, self.dlam[self.feh_fit_mask])
+            #cwave, cflux, _, _ = self.pca_feh.convolve(wvl, synth)
+            #res = FluxConservingResampler()
+            #synthi, _ = res.resample_value(cwave, None, cflux, target_wave=wvl_fit)
+        #ENK -- END --
 
-        return synthi
+        return synthi[self.feh_fit_mask]   #ENK: limit the spectrum to the feh regions
                                                      
     def get_synth_step1(self, wvl_fit=None, teff_fit=None, feh_fit=None, logg_fit=None):
 
@@ -446,20 +492,27 @@ class MeasurePFSAbund():
         #Read in the synthetic spectrum with both blue and red components
         
         if logg_fit is not None: #if logg is a free parameter
-            wvl, synth = self.construct_synth(wvl_fit, teff_fit, feh_fit, logg_fit, self.alphafe0)
+            # ENK: wvl_fit -> self.wvl    
+            wvl, synthi = self.construct_synth(self.wvl, teff_fit, feh_fit, logg_fit, self.alphafe0)
         else:
-            wvl, synth = self.construct_synth(wvl_fit, teff_fit, feh_fit, self.logg, self.alphafe0)
+            # ENK: wvl_fit -> self.wvl
+            wvl, synthi = self.construct_synth(self.wvl, teff_fit, feh_fit, self.logg, self.alphafe0)
 
         #Smooth the synthetic spectrum and interpolate it onto the observed wavelength array
         #Assume that the spectral resolution is constant for a given arm of PFS
         
-        if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray): 
-            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit[1:], 
-                self.dlam[self.feh_fit_mask])
-    
+        #ENK -- BEGIN --
+        #if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray): 
+            #synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit[1:], 
+                #self.dlam[self.feh_fit_mask])
+            #cwave, cflux, _, _ = self.pca_feh.convolve(wvl, synth)
+            #res = FluxConservingResampler()
+            #synthi, _ = res.resample_value(cwave, None, cflux, target_wave=wvl_fit[1:])
+        #ENK -- END --
+   
         #Insert the effective temperature pixel to the beginning of the synthetic spectrum
-        synthi = np.insert(synthi, 0, teff_fit)
 
+        synthi = np.insert(synthi[self.feh_fit_mask], 0, teff_fit)   #ENK: limit the spectrum to the feh regions
         return synthi
         
     def get_synth_step2(self, wvl_fit=None, alphafe_fit=None):
@@ -469,16 +522,21 @@ class MeasurePFSAbund():
             are held constant at the values from step1, and the alpha abundance is varied.
             """
     
-            #Read in the synthetic spectrum
-            wvl, synth = self.construct_synth(wvl_fit, self.teff, self.feh, self.logg, 
+            #Read in the synthetic spectrum - ENK: wvl_fit -> self.wvl
+            wvl, synthi = self.construct_synth(self.wvl, self.teff, self.feh, self.logg, 
                          alphafe_fit)
 
             #Smooth the synthetic spectrum according to the spectral resolution
-            if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray):
-                synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, 
-                    self.dlam[self.alphafe_fit_mask])
+            #ENK -- BEGIN --
+            #if isinstance(self.dlam, list) or isinstance(self.dlam, np.ndarray):
+                #synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_fit, 
+                    #self.dlam[self.alphafe_fit_mask])
+                #cwave, cflux, _, _ = self.pca_alphafe.convolve(wvl, synth)
+                #res = FluxConservingResampler()
+                #synthi, _ = res.resample_value(cwave, None, cflux, target_wave=wvl_fit)
+            #ENK -- END --
 
-            return synthi
+            return synthi[self.alphafe_fit_mask]   #ENK: limit the spectrum to the alphafe regions
             
     def get_best_synth(self, wvl_obs=None, teff=None, feh=None, logg=None, alphafe=None):
                        
@@ -491,11 +549,16 @@ class MeasurePFSAbund():
             if alphafe is None:
                 alphafe = self.best_params1[0]
     
-            #Read in the synthetic spectrum
-            wvl, synth = self.construct_synth(wvl_obs, teff, feh, logg, alphafe)
+            #Read in the synthetic spectrum - ENK: wvl_fit -> self.wvl
+            wvl, synthi = self.construct_synth(self.wvl, teff, feh, logg, alphafe)
 
+            #ENK -- BEGIN --
             #Smooth the synthetic spectrum according to the spectral resolution
-            synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_obs, self.dlam)
+            #synthi = ut.io.smooth_gauss_wrapper(wvl, synth, wvl_obs, self.dlam)
+            #cwave, cflux, _, _ = self.pca.convolve(wvl, synth)
+            #res = FluxConservingResampler()
+            #synthi, _ = res.resample_value(cwave, None, cflux, target_wave=wvl_obs)
+            #ENK -- END --
 
             return synthi
         
@@ -507,43 +570,53 @@ class MeasurePFSAbund():
         """
         
         #If observational data exists in the wavelength range of the blue grid
-        if len(self.wb) > 0:
+        #if len(self.wb) > 0:
 
 
             
             #Read in the synthetic spectrum from the blue grid
-            wvlb, synthb = read.io.read_interp_synth(teff=teff_in,
+        #ENK - limit wvl to blue grid range
+        wb = (wvl >= 4100) & (wvl < 6300)
+        wvlb, synthb = read.io.read_interp_synth(wvl=wvl[wb], teff=teff_in,
                 logg=logg_in, feh=feh_in, alphafe=alphafe_in, 
-                data_path=self.synth_path_blue, hash=self.hash_blue)
+                data_path=self.synth_path_blue, hash=self.hash_blue, dlam=self.dlam[wb])
             
             #Make sure that the synthetic spectrum is within the data range for observations,
-            wsynthb = np.where( (wvlb > wvl.min() ) & (wvlb < wvl.max() ) )[0]
+            #wsynthb = np.where( (wvlb > wvl.min() ) & (wvlb < wvl.max() ) )[0]
         
         #If observational data exists in the wavelength range of the red grid
-        if len(self.wr) > 0:
+        #if len(self.wr) > 0:
             
             #Read in the synthetic spectrum from the red grid
-            wvlr, synthr = read.io.read_interp_synth(teff=teff_in,
+        #ENK - limit wvl to red grid range
+        wr = (wvl >= 6300) & (wvl < 9100)
+        wvlr, synthr = read.io.read_interp_synth(wvl=wvl[wr], teff=teff_in,
                 logg=logg_in, feh=feh_in, alphafe=alphafe_in, 
                 data_path=self.synth_path_red, start=6300., sstop=9100., 
-                hash=self.hash_red)
+                hash=self.hash_red, dlam=self.dlam[wr])
             
-            wsynthr = np.where( (wvlr > wvl.min() ) & (wvlr < wvl.max() ) )[0]
+            #wsynthr = np.where( (wvlr > wvl.min() ) & (wvlr < wvl.max() ) )[0]
         
+        #ENK -- BEGIN --
         #Some checks based on where data is present
-        if len(self.wb) > 0 and len(self.wr) == 0: 
-            wvl_synth = wvlb[wsynthb]
-            synth = synthb[wsynthb]
+        #if len(self.wb) > 0 and len(self.wr) == 0: 
+        #    wvl_synth = wvlb
+        #    synth = synthb
             
-        elif len(self.wb) == 0 and len(self.wr) > 0:
-            wvl_synth = wvlr[wsynthr]
-            synth = relflux_synth_red[wsynthr]
+        #elif len(self.wb) == 0 and len(self.wr) > 0:
+        #    wvl_synth = wvlr
+        #    synth = synthr    #ENK: changed relflux_synth_red to synthr
             
-        else:
-            wvl_synth = np.append(wvlb[wsynthb], wvlr[wsynthr])
-            synth = np.append(synthb[wsynthb], synthr[wsynthr])
-            
-        return wvl_synth, synth
+        #else:
+        #       wvl_synth = np.append(wvlb, wvlr)
+        #    synth = np.append(synthb, synthr)
+        #ENK -- END --
+        
+        #ENK: concatenate blue and red
+        synth = np.full(len(wvl), np.nan)
+        synth[wb] = synthb
+        synth[wr] = synthr
+        return wvl, synth
         
     def fit_masks(self, pfs=None):
     
