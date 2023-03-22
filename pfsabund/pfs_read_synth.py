@@ -9,6 +9,7 @@ import numpy as np
 import functools
 import gzip
 import sys
+from pfsabund import pfs_utilities as ut
 
 class ReadSynth():
 
@@ -121,8 +122,8 @@ class ReadSynth():
     
         return filename
         
-    def read_interp_synth(self, teff=np.nan, logg=np.nan, feh=np.nan, alphafe=np.nan, 
-        fullres=False, data_path='./', start=4100., sstop=6300., hash=None, npar=4):
+    def read_interp_synth(self, wvl=np.nan, teff=np.nan, logg=np.nan, feh=np.nan, alphafe=np.nan, 
+        fullres=False, data_path='./', start=4100., sstop=6300., hash=None, dlam=np.nan, npar=4):
 
         """
         Construct a synthetic spectrum in between grid points based on linear interpolation
@@ -204,10 +205,14 @@ class ReadSynth():
         else: 
             step = 0.14
     
+        #ENK: ensure that wavelength array goes to the last pixel, even accounting for floating point rounding error
+        wave = np.arange(start, sstop+step, step)
+        wave = wave[wave <= sstop+0.01]
+
         #Calculate the number of pixels in the synthetic spectrum, and initialize the
-        #interpolated synthetic spectrum array
-        npixels = len(np.arange(start, sstop, step))
-        synth_interp = np.zeros(npixels)
+        #interpolated synthetic spectrum array  --  ENK: final spectrum has length of wvl
+        npixels_smooth = len(wvl)
+        synth_interp = np.zeros(npixels_smooth)
     
         #Function for loading a specified synthetic spectrum
         def load_synth(p):
@@ -228,19 +233,25 @@ class ReadSynth():
                     _,synthi = self.read_synth(Teff=teff_arr[teffi], Logg=logg_arr[loggi],
                     Feh=feh_arr[fehi], Alphafe=alphafe_arr[alphafei], fullres=fullres, 
                     data_path=data_path, start=start, sstop=sstop)
-                
-                    hash[key] = synthi
+                    
+                    #ENK: smooth and rebin the spectrum
+                    synthi_smooth = ut.io.smooth_gauss_wrapper(wave, synthi, wvl, dlam)
+                    
+                    hash[key] = synthi_smooth
                 
                 #If the key is already present in the hash table, then find it and load the data
                 else: 
-                    synthi = hash[key]
+                    synthi_smooth = hash[key]
             
             else:
                 _,synthi = self.read_synth(Teff=teff_arr[teffi], Logg=logg_arr[loggi],
                 Feh=feh_arr[fehi], Alphafe=alphafe_arr[alphafei], fullres=fullres, 
                 data_path=data_path, start=start, sstop=sstop)
+                
+                #ENK: smooth and rebin the spectrum
+                synthi_smooth = ut.io.smooth_gauss_wrapper(wave, synthi, wvl, dlam)
         
-            return synthi
+            return synthi_smooth
     
         #Load each nearby synthetic spectrum on the grid to linearly interpolate
         #to calculate the interpolated synthetic spectrum
@@ -252,7 +263,7 @@ class ReadSynth():
                         p = [iparams[0][i], iparams[1][j], iparams[2][k], iparams[3][l]]
                         synthi = load_synth(p)
                     
-                        for m in range(npixels):
+                        for m in range(npixels_smooth):
                             synth_interp[m] += ds[0][i]*ds[1][j]*ds[2][k]*ds[3][l]*synthi[m]
                     
         facts = []
@@ -264,9 +275,8 @@ class ReadSynth():
             facts.append(fact)
         
         synth_interp /= functools.reduce(lambda x, y: x*y, facts)
-        wave = np.arange(start, sstop, step)
     
-        return wave, synth_interp
+        return wvl, synth_interp
         
     def enforce_grid_check(self, teff=np.nan, logg=np.nan, feh=np.nan, alphafe=np.nan):
 
