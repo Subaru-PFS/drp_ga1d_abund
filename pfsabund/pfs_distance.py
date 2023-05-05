@@ -15,19 +15,19 @@ from astroquery.gaia import Gaia
 
 def estimate_dist(ra, dec, mag, filter):
 
-    print("Estimate distance for an object at (RA, DEC) = (%.7f, %.6f)"\
-          %(ra, dec))
+    #print("Estimate distance for an object at (RA, DEC) = (%.7f, %.6f)"\
+         # %(ra, dec))
 
     # Query parallax 
     gaiaid, parallax, parallax_error = query_GaiaEDR3(ra, dec, mag, filter)
 
-    if np.isscalar(parallax) == False:
-        print("Multiple Gaia objects found at (RA, DEC) = (%.7f, %.6f)"\
-              %(ra, dec))
+    #if np.isscalar(parallax) == False:
+        #print("Multiple Gaia objects found at (RA, DEC) = (%.7f, %.6f)"\
+           #   %(ra, dec))
         
-    elif gaiaid == "":
-        print("No objects found at (RA, DEC) = (%.7f, %.6f)"\
-              %(ra, dec))
+    #elif gaiaid == "":
+        #print("No objects found at (RA, DEC) = (%.7f, %.6f)"\
+           #   %(ra, dec))
         
 
     

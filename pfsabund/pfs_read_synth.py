@@ -169,7 +169,7 @@ class ReadSynth():
         if not in_grid: return
                
         params = np.array([teff, logg, feh, alphafe])
-        params_grid = np.array([teff_arr, logg_arr, feh_arr, alphafe_arr])
+        params_grid = np.array([teff_arr, logg_arr, feh_arr, alphafe_arr], dtype=object)
     
         #Now identify the nearest grid points to the specified parameter values
         ds = []; nspecs = []; iparams = []
@@ -320,7 +320,7 @@ class ReadSynth():
         teff_vals = np.array([3600., 3700., 3800., 3900., 4000., 4100.])
         feh_thresh = np.array([-4.9, -4.8, -4.8, -4.7, -4.4, -4.6])
         logg_thresh = np.array([[1.5], [2.5, 3.5, 4.0, 4.5], [4.0, 4.5], 
-                               [2.5, 3.0, 3.5, 4.0, 4.5, 5.0], [4.5, 5.0], [4.5, 5.0]])
+                               [2.5, 3.0, 3.5, 4.0, 4.5, 5.0], [4.5, 5.0], [4.5, 5.0]], dtype=object)
     
         if teff in teff_vals:                       
             where_teff = np.where(teff_vals == teff)[0][0]

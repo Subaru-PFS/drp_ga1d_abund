@@ -50,7 +50,7 @@ class PFSUtilities():
         #Use a grid of stellar evolutionary models to infer the photometric
         #quantities via interpolation, or extrapolation as necessary
 
-        print(dm, ddm)
+        #print(dm, ddm)
         phot_dict = phot.from_phot(pfs.prop('mag')[pfs.prop('filter') == 'i'], 
                                    pfs.prop('mag')[pfs.prop('filter') == 'g']-\
                                    pfs.prop('mag')[pfs.prop('filter') == 'i'], 

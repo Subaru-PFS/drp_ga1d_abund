@@ -1,7 +1,7 @@
 """
-@author: I.Escala (iescala@carnegiescience.edu)
+@author: I.Escala (iescala@caltech.edu)
 
-A Python implentation of feh.pro (E.N. Kirby), built for compatability with
+A Python implentation of feh.pro (E.N. Kirby), built for compatability with 
 PARSEC isochrones
 CMD v3.3 defaults
 filter: Subaru/Hyper-Suprime Cam (AB mags)
@@ -115,7 +115,8 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
     ## ORIGINAL
 
     iso_files = glob.glob(os.path.dirname(__file__) + f'/../isochrones/feh_{filter}_*_{kind}.dat')
-
+    #print(iso_files)
+    
     # MNI
 
     nages = len(iso_files)
@@ -142,7 +143,7 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
 
         usecols = (0,2,7,8,9,25,27)
 
-        Zi, age, Te, logg, label, mag_blue, mag_red = np.loadtxt(file, skiprows=12, unpack=True,
+        Zi, age, Te, logg, label, mag_blue, mag_red = np.loadtxt(file, skiprows=12, unpack=True, 
                                                                          usecols=usecols)
         feh_val = np.unique(Zi)
 
@@ -153,8 +154,8 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
         # MNI -- END --
 
 
-        print(f'{kind.upper()} isochrone set using {filter.upper()} filter, assuming age = '+\
-        f'{str(int(np.unique(age)[0]/1.e9))} Gyr')
+        #print(f'{kind.upper()} isochrone set using {filter.upper()} filter, assuming age = '+\
+        #f'{str(int(np.unique(age)[0]/1.e9))} Gyr')
 
 
 
@@ -313,6 +314,17 @@ def from_phot(mag_in, color_in, err_mag_in=None, err_color_in=None,
 
                         logt_mc = griddata((clr_grid, mag_grid), logt_grid, (clr_mc, mag_mc), fill_value=-999.)
                         wgood = np.where( (10**logt_mc >= 3000.) & (10**logt_mc <= 10000) )[0]
+
+                        
+			# MNI -- BEGIN --
+
+                        # - ORIGINAL - 
+                        #print len(wgood)
+                        # - ORIGINAL -
+                        
+                        print(len(wgood))
+                        
+			# MNI -- END --
 
 
                         if len(wgood) > 2:

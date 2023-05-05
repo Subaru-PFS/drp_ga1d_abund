@@ -54,8 +54,8 @@ from pfsabund import pfs_distance as dist
 # MNI -- END --
 
 # ENK -- BEGIN --
-from lsfconv.psf import *
-from lsfconv.resampling.fluxconservingresampler import FluxConservingResampler
+#from lsfconv.psf import *
+#from lsfconv.resampling.fluxconservingresampler import FluxConservingResampler
 # ENK -- END --
 
 
@@ -88,8 +88,8 @@ class MeasurePFSAbund():
     
     def __init__(self, pfs=None, mode=None, root = \
                  os.path.dirname(__file__) + '/../', \
-                 synth_path_blue = '/raid/gridie/', \
-                 synth_path_red = '/raid/grid7/', \
+                 synth_path_blue = '/afs/crc.nd.edu/user/b/banguian/gridie/', \
+                 synth_path_red = '/afs/crc.nd.edu/user/b/banguian/grid7/', \
                  dm=22., ddm=0.1, fit_logg=False):
 
         
@@ -119,8 +119,6 @@ class MeasurePFSAbund():
                 dist.calc_dmod_from_distances(pfs.prop('distance'), pfs.prop('distance_error'))
         # MNI -- END --
 
-
-
         
         #Calculate photometric quantities to take as input for the abundance pipeline
         #Note for the case of fit_logg=True where the distance modulus is not well
@@ -149,7 +147,7 @@ class MeasurePFSAbund():
         self.logg_def = 1.
 
         #Define convergence criteria for the continuum refinement
-        self.maxiter = 50
+        self.maxiter = 15
         self.feh_thresh = 0.001; self.alphafe_thresh = 0.001
         self.teff_thresh = 1.; self.logg_thresh = 0.001
         
@@ -159,13 +157,13 @@ class MeasurePFSAbund():
         #self.teff0 = pfs.prop('teffphot')
         self.teff0 = 4210.   #ENK: changed Teff to match "true" value
         #self.tefferr0 = pfs.prop('teffphoterr')   #ENK: new property tefferr0
-        self.tefferr0 = 0.0001                          #ENK: arbitrary value
+        self.tefferr0 = 200.                          #ENK: arbitrary value
         
         #If fitting for the surface gravity, set logg to the default value
         #otherwise, fix to the photometric value
         if fit_logg: self.logg0 = self.logg_def
         #else: self.logg = pfs.prop('loggphot')
-        else: self.logg = 1.3   #ENK: changed Teff to match "true" value
+        else: self.logg = 0.0   #ENK: changed Teff to match "true" value
         
         #Execute abundance measurement
         self.measure_abund(pfs, fit_logg=fit_logg)
@@ -205,8 +203,8 @@ class MeasurePFSAbund():
         pfs.assign(pfs.prop('initcont'), 'refinedcont')
 
         #ENK -- BEGIN --
-        gauss = GaussPsf(pfs.prop('wvl'), sigma=self.dlam)
-        self.pca = PcaPsf.from_psf(gauss, pfs.prop('wvl'))
+        #gauss = GaussPsf(pfs.prop('wvl'), sigma=self.dlam)
+        #self.pca = PcaPsf.from_psf(gauss, pfs.prop('wvl'))
         #ENK -- END --
         
         while i < self.maxiter:
@@ -261,9 +259,9 @@ class MeasurePFSAbund():
                                                            
                 self.teff, self.feh = self.best_params0
                 synth1 = self.get_synth_step1(wvl_teff, self.teff, self.feh, logg_fit=None)   #ENK: get the best-fit synthetic spectrum from step 1
-                plt.plot(wvl_teff[1:], flux_teff[1:], marker='+', linestyle='None')           #ENK
+                plt.plot(wvl_teff[1:], flux_teff[1:], linestyle='None')           #ENK
                 #plt.plot(wvl_teff[1:], sigma_teff[1:], marker='+', linestyle='None')          #ENK
-                plt.plot(wvl_teff[1:], synth1[1:], marker='+', linestyle='None')              #ENK
+                plt.plot(wvl_teff[1:], synth1[1:], linestyle='None')              #ENK
                 #plt.xlim([8450, 8700])                                                        #ENK
                 plt.show()                                                                    #ENK
                 
@@ -320,7 +318,7 @@ class MeasurePFSAbund():
                 
             else:
             
-                print(final)
+                #print(final)
                 
                 self.teff0 = self.teff
                 self.feh0 = self.feh
@@ -332,8 +330,8 @@ class MeasurePFSAbund():
                 i += 1
                 
         if i == self.maxiter:
-            print('WARNING: Maximum number of continuum iterations exceeded: exiting '+
-                   'continuum refinement loop')
+            #print('WARNING: Maximum number of continuum iterations exceeded: exiting '+
+                #   'continuum refinement loop')
             pfs.assign('converge_flag', 0)
             
         else:
@@ -400,7 +398,7 @@ class MeasurePFSAbund():
         pfs.assign(best_synth_final, 'synth')
                                 
         print(pfs.prop('teff'), pfs.prop('logg'), pfs.prop('feh'), pfs.prop('alphafe'))
-        print(pfs.prop('tefferr'), pfs.prop('loggerr'), pfs.prop('feherr'), pfs.prop('alphafeerr'))
+        #print(pfs.prop('tefferr'), pfs.prop('loggerr'), pfs.prop('feherr'), pfs.prop('alphafeerr'))
         
         return
     
