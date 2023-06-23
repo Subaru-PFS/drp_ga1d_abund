@@ -54,8 +54,8 @@ from pfsabund import pfs_distance as dist
 # MNI -- END --
 
 # ENK -- BEGIN --
-from lsfconv.psf import *
-from lsfconv.resampling.fluxconservingresampler import FluxConservingResampler
+#from lsfconv.psf import *
+#from lsfconv.resampling.fluxconservingresampler import FluxConservingResampler
 # ENK -- END --
 
 
@@ -205,8 +205,8 @@ class MeasurePFSAbund():
         pfs.assign(pfs.prop('initcont'), 'refinedcont')
 
         #ENK -- BEGIN --
-        gauss = GaussPsf(pfs.prop('wvl'), sigma=self.dlam)
-        self.pca = PcaPsf.from_psf(gauss, pfs.prop('wvl'))
+        #gauss = GaussPsf(pfs.prop('wvl'), sigma=self.dlam)
+        #self.pca = PcaPsf.from_psf(gauss, pfs.prop('wvl'))
         #ENK -- END --
         
         while i < self.maxiter:
