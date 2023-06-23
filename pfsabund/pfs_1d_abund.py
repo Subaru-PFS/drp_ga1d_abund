@@ -156,16 +156,16 @@ class MeasurePFSAbund():
         #Store initial guess values in new variables
         self.feh0 = self.feh_def
         self.alphafe0 = self.alphafe_def
-        #self.teff0 = pfs.prop('teffphot')
-        self.teff0 = 4210.   #ENK: changed Teff to match "true" value
-        #self.tefferr0 = pfs.prop('teffphoterr')   #ENK: new property tefferr0
-        self.tefferr0 = 0.0001                          #ENK: arbitrary value
+        self.teff0 = pfs.prop('teffphot')
+        #self.teff0 = 4210.   #ENK: changed Teff to match "true" value
+        self.tefferr0 = pfs.prop('teffphoterr')   #ENK: new property tefferr0
+        #self.tefferr0 = 0.0001                          #ENK: arbitrary value
         
         #If fitting for the surface gravity, set logg to the default value
         #otherwise, fix to the photometric value
         if fit_logg: self.logg0 = self.logg_def
-        #else: self.logg = pfs.prop('loggphot')
-        else: self.logg = 1.3   #ENK: changed Teff to match "true" value
+        else: self.logg = pfs.prop('loggphot')
+        #else: self.logg = 1.3   #ENK: changed Teff to match "true" value
         
         #Execute abundance measurement
         self.measure_abund(pfs, fit_logg=fit_logg)
