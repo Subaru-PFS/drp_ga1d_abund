@@ -372,7 +372,8 @@ class PFSUtilities():
 
         return data
         
-    def construct_mask(self, pfs=None, fit_ranges=[[4100., 9100.]]):
+    def construct_mask(self, pfs=None, fit_ranges=[[4500., 8488.023], [8508.023, 8525.091],
+                                                   [8561.091, 8645.141], [8679.141, 9100.]]):
 
         """
         Construct a wavelength mask (in Angstroms) for the given wavelength array, based on 

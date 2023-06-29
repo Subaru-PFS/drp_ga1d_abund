@@ -90,7 +90,7 @@ class MeasurePFSAbund():
                  os.path.dirname(__file__) + '/../', \
                  synth_path_blue = '/raid/gridie/', \
                  synth_path_red = '/raid/grid7/', \
-                 dm=22., ddm=0.1, fit_logg=False):
+                 dm=22., ddm=0.1, fit_logg=False, pars=None):  #ENK 5-10-2023: add pars keyword
 
         
         # MNI -- END --
@@ -119,7 +119,10 @@ class MeasurePFSAbund():
                 dist.calc_dmod_from_distances(pfs.prop('distance'), pfs.prop('distance_error'))
         # MNI -- END --
 
-
+        #<ENK> 5-10-2023        
+        if pars==None:
+            pars = [4500, 1.5, -1.5, 0.0]
+        #</ENK>
 
         
         #Calculate photometric quantities to take as input for the abundance pipeline
@@ -144,9 +147,11 @@ class MeasurePFSAbund():
         #Initialize a hash table to use to store the synthetic spectral data in memory
         self.hash_blue = {}; self.hash_red = {}
         
-        self.feh_def = -2. #starting point for metallicity -- this value doesn't matter
-        self.alphafe_def = 0.
-        self.logg_def = 1.
+        #<ENK> 5-10-2023: use pars list
+        self.feh_def = pars[2] #starting point for metallicity -- this value doesn't matter
+        self.alphafe_def = pars[3]
+        self.logg_def = pars[1]
+        #</ENK>
 
         #Define convergence criteria for the continuum refinement
         self.maxiter = 50
@@ -156,16 +161,16 @@ class MeasurePFSAbund():
         #Store initial guess values in new variables
         self.feh0 = self.feh_def
         self.alphafe0 = self.alphafe_def
-        self.teff0 = pfs.prop('teffphot')
-        #self.teff0 = 4210.   #ENK: changed Teff to match "true" value
-        self.tefferr0 = pfs.prop('teffphoterr')   #ENK: new property tefferr0
-        #self.tefferr0 = 0.0001                          #ENK: arbitrary value
+        #self.teff0 = pfs.prop('teffphot')
+        self.teff0 = pars[0]   #ENK 5-10-2023: changed Teff to match "true" value
+        #self.tefferr0 = pfs.prop('teffphoterr')   #ENK: new property tefferr0
+        self.tefferr0 = 0.0001                          #ENK: arbitrary value
         
         #If fitting for the surface gravity, set logg to the default value
         #otherwise, fix to the photometric value
         if fit_logg: self.logg0 = self.logg_def
-        else: self.logg = pfs.prop('loggphot')
-        #else: self.logg = 1.3   #ENK: changed Teff to match "true" value
+        #else: self.logg = pfs.prop('loggphot')
+        else: self.logg = pars[1]   #ENK 5-10-2023: changed Teff to match "true" value
         
         #Execute abundance measurement
         self.measure_abund(pfs, fit_logg=fit_logg)
@@ -260,12 +265,12 @@ class MeasurePFSAbund():
                                                            gtol=1.e-10, xtol=1.e-10)
                                                            
                 self.teff, self.feh = self.best_params0
-                synth1 = self.get_synth_step1(wvl_teff, self.teff, self.feh, logg_fit=None)   #ENK: get the best-fit synthetic spectrum from step 1
-                plt.plot(wvl_teff[1:], flux_teff[1:], marker='+', linestyle='None')           #ENK
-                #plt.plot(wvl_teff[1:], sigma_teff[1:], marker='+', linestyle='None')          #ENK
-                plt.plot(wvl_teff[1:], synth1[1:], marker='+', linestyle='None')              #ENK
-                #plt.xlim([8450, 8700])                                                        #ENK
-                plt.show()                                                                    #ENK
+                # synth1 = self.get_synth_step1(wvl_teff, self.teff, self.feh, logg_fit=None)   #ENK: get the best-fit synthetic spectrum from step 1
+                # plt.plot(wvl_teff[1:], flux_teff[1:], marker='+', linestyle='None')           #ENK
+                # #plt.plot(wvl_teff[1:], sigma_teff[1:], marker='+', linestyle='None')          #ENK
+                # plt.plot(wvl_teff[1:], synth1[1:], marker='+', linestyle='None')              #ENK
+                # plt.xlim([8450, 8700])                                                        #ENK
+                # plt.show()                                                                    #ENK
                 
                                                      
             #Perform the fit [alpha/Fe]
@@ -296,12 +301,15 @@ class MeasurePFSAbund():
             ut.io.continuum_refinement(pfs, best_synth)
 
             #PLOTING SPECTRA + TEMPLATE (BEST_FIT)
-            #plt.plot(pfs['wvl'][self.feh_fit_mask], pfs['flux'][self.feh_fit_mask] / pfs['refinedcont'][self.feh_fit_mask], marker='.')
-            #plt.plot(pfs['wvl'][self.feh_fit_mask], best_synth[self.feh_fit_mask], marker='.')
-            #plt.plot(pfs['wvl'], pfs['flux'] / pfs['refinedcont'], marker='.', linestyle='None')
-            #plt.plot(pfs['wvl'], best_synth, marker='.', linestyle='None')
-            #plt.xlim([5000, 5300])
-            #plt.show()
+            # plt.plot(pfs['wvl'][self.feh_fit_mask], pfs['flux'][self.feh_fit_mask] / pfs['refinedcont'][self.feh_fit_mask], marker='.')
+            # plt.plot(pfs['wvl'][self.feh_fit_mask], best_synth[self.feh_fit_mask], marker='.')
+            # plt.plot(pfs['wvl'][self.alphafe_fit_mask], pfs['flux'][self.alphafe_fit_mask] / pfs['refinedcont'][self.alphafe_fit_mask], marker='.')
+            # plt.plot(pfs['wvl'][self.alphafe_fit_mask], best_synth[self.alphafe_fit_mask], marker='.')
+            # plt.plot(pfs['wvl'], pfs['flux'] / pfs['refinedcont'], marker='.', linestyle='None')
+            # plt.plot(pfs['wvl'], best_synth, marker='.', linestyle='None')
+            # plt.xlim([8450, 8700])
+            # plt.ylim([0.5, 1.1])
+            # plt.show()
             
             #Check if the continuum iteration has converged
             
@@ -398,6 +406,20 @@ class MeasurePFSAbund():
                                                alphafe=pfs.prop('alphafe'))
                                                
         pfs.assign(best_synth_final, 'synth')
+
+        # plt.plot(pfs['wvl'][self.feh_fit_mask], pfs['flux'][self.feh_fit_mask] / pfs['refinedcont'][self.feh_fit_mask], marker='.')
+        # plt.plot(pfs['wvl'][self.feh_fit_mask], best_synth_final[self.feh_fit_mask], marker='.')
+        # plt.plot(pfs['wvl'][self.alphafe_fit_mask], pfs['flux'][self.alphafe_fit_mask] / pfs['refinedcont'][self.alphafe_fit_mask], marker='.')
+        # plt.plot(pfs['wvl'][self.alphafe_fit_mask], best_synth_final[self.alphafe_fit_mask], marker='.')
+        # plt.plot(pfs['wvl'], pfs['flux'] / pfs['refinedcont'], marker='.', linestyle='None')
+        # plt.plot(pfs['wvl'], best_synth_final, marker='.', linestyle='None')
+        # plt.plot(pfs['wvl'][self.feh_fit_mask], ((pfs['flux'][self.feh_fit_mask] / pfs['refinedcont'][self.feh_fit_mask])
+        #     - best_synth_final[self.feh_fit_mask]) * (pfs['ivar'][self.feh_fit_mask]**(0.5) * pfs['refinedcont'][self.feh_fit_mask]), marker='.')
+        # plt.plot(pfs['wvl'][self.feh_fit_mask], (pfs['flux'][self.feh_fit_mask] / pfs['refinedcont'][self.feh_fit_mask])
+        #    - best_synth_final[self.feh_fit_mask], marker='.')
+        # plt.xlim([8450, 8700])
+        # plt.ylim([0.5, 1.1])
+        # plt.show()
                                 
         print(pfs.prop('teff'), pfs.prop('logg'), pfs.prop('feh'), pfs.prop('alphafe'))
         print(pfs.prop('tefferr'), pfs.prop('loggerr'), pfs.prop('feherr'), pfs.prop('alphafeerr'))
