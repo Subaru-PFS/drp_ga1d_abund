@@ -115,7 +115,7 @@ class PFSUtilities():
             The minus one changes it such that lambda[i] <= lambda2 < lambda[i+1] for i = 0,n2-2
             in accordance with IDL
             """
-            result = np.digitize(u, v)-1
+            result = np.digitize(v, u)-1  #2023-08-04: swapped v, u (thanks to Katie Kvasova)
             w = [int((v[i] - u[result[i]])/(u[result[i]+1] - u[result[i]]) + result[i]) for i in range(n2)]
             return np.array(w)
     
@@ -372,8 +372,8 @@ class PFSUtilities():
 
         return data
         
-    def construct_mask(self, pfs=None, fit_ranges=[[4500., 8488.023], [8508.023, 8525.091],
-                                                   [8561.091, 8645.141], [8679.141, 9100.]]):
+    def construct_mask(self, pfs=None, fit_ranges=[[4500., 5164.322], [5170.322, 5892.924],
+           [5898.924, 8488.023], [8508.023, 8525.091], [8561.091, 8645.141], [8679.141, 9100.]]):
 
         """
         Construct a wavelength mask (in Angstroms) for the given wavelength array, based on 
