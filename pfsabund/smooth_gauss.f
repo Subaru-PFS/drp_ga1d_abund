@@ -22,7 +22,6 @@ Cf2py intent(out) spec2
 
             temp2 = 0.
             temp3 = 0.
-            temp4 = 0.
 
             do 20 j=low,high
 
@@ -33,7 +32,6 @@ Cf2py intent(out) spec2
      
                   temp2 = temp2 + gauss
                   temp3 = temp3 + spec1(j)*gauss
-                  temp4 = temp4 + gauss*gauss
 
                endif
  20         continue
